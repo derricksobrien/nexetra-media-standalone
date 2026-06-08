@@ -1,0 +1,155 @@
+# Nexetra Media Factory .gitignore
+# Omits high-volume artifacts, sensitive files, and build byproducts
+
+# === Environment & Credentials (NEVER commit) ===
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.pub
+*.p8
+.aws/
+.azure/
+.ssh/
+secrets/
+credentials.json
+config.json
+.huggingface/token
+ollama-session.log
+
+# === Python & Virtual Environments ===
+venv/
+env/
+ENV/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.tox/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# === Node & Package Managers ===
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-lock.yaml
+.yarn/cache/
+
+# === High-Volume Media & Artifacts ===
+# Output folders (generated videos, audio, frames)
+output/
+output/*/
+dist/
+artifacts/
+
+# Temporary working files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Model downloads & caches (can be multi-GB)
+models/
+checkpoints/
+*.ckpt
+*.pth
+*.bin
+*.safetensors
+huggingface/
+ollama/data/
+.ollama/
+
+# ComfyUI & GPU-heavy tools
+ComfyUI/models/
+ComfyUI/input/
+ComfyUI/output/
+ComfyUI/temp/
+ComfyUI/__pycache__/
+
+# TTS & Voice models (large)
+tts-models/
+voice-models/
+xtts-models/
+
+# Video intermediates (uncompressed frames, temp audio)
+*.yuv
+*.raw
+*.pcm
+*.wav.tmp
+temp-frames/
+frame-*.png
+frame-*.jpg
+
+# === IDE & Editor ===
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/*.log
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.sublime-project
+.sublime-workspace
+
+# === OS & System Files ===
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+# === Log Files ===
+*.log
+logs/
+run-*.log
+debug.log
+error.log
+access.log
+
+# === Testing & Coverage ===
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# === Database Files ===
+*.db
+*.sqlite
+*.sqlite3
+*.pkl
+*.pickle
+
+# === Runtime Lock Files ===
+*.lock
+.nvida-pref*
+.cache/
+.local/
+
+# === Sensitive per-machine configs ===
+pipeline/config.local.json
+pipeline/.env.local
+jobs/secrets.json
+rtc-results.csv  # RTT test results (may contain IP/perf data)
+
+# === Git housekeeping ===
+.git/hooks/pre-push.sh  # If you add security hooks
+.gitignore.bak
+
+# === Allow these (exceptions) ===
+!.gitkeep
+!docs/
+!templates/
+!.gitmodules
