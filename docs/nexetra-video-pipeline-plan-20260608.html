@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexetra Video Pipeline Plan — 2026-06-08</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --accent: #6c63ff;
+      --accent2: #00d4ff;
+      --text: #e2e4ef;
+      --muted: #8b90a8;
+      --green: #22c55e;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --border: #2e3250;
+      --radius: 8px;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      --mono: 'Cascadia Code', 'Consolas', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.65;
+      padding: 0 0 80px;
+    }
+    header {
+      background: linear-gradient(135deg, #1a1d27 0%, #12152a 100%);
+      border-bottom: 2px solid var(--accent);
+      padding: 40px 48px 32px;
+    }
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header .meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+    header .meta span { margin-right: 24px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 48px; }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent2);
+      margin: 40px 0 16px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+    p { margin-bottom: 10px; }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 0.9rem;
+    }
+    th {
+      background: var(--surface2);
+      color: var(--accent2);
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td {
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    tr:nth-child(even) td { background: #1e2133; }
+    pre, code {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+    pre {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 12px 0 20px;
+      line-height: 1.55;
+    }
+    code {
+      background: var(--surface2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent2);
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+    }
+    ol, ul { padding-left: 22px; margin-bottom: 14px; }
+    li { margin-bottom: 5px; }
+    .phase-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .phase-block h3 {
+      color: var(--accent);
+      margin-top: 0;
+      font-size: 1.05rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .badge-free { background: #14532d; color: var(--green); }
+    .badge-cloud { background: #451a03; color: var(--yellow); }
+    .badge-local { background: #1e1b4b; color: #a5b4fc; }
+    .arch-box {
+      background: #12152a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+    }
+    .arch-line { display: flex; align-items: flex-start; margin: 6px 0; font-size: 0.875rem; }
+    .arch-line .label { color: var(--accent2); min-width: 200px; font-family: var(--mono); }
+    .arch-line .desc { color: var(--muted); }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+    .checklist li::before {
+      content: '☐';
+      color: var(--accent);
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+    .mvp-box {
+      background: linear-gradient(135deg, #1a2a1a, #1a1d27);
+      border: 1px solid var(--green);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+    }
+    .mvp-box .number { font-size: 2.5rem; font-weight: 700; color: var(--green); }
+    .section-intro { color: var(--muted); margin-bottom: 16px; font-size: 0.925rem; }
+    .tier-tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .tier1 { background: #14532d; color: var(--green); }
+    .tier2 { background: #451a03; color: var(--yellow); }
+    .tier3 { background: #3b0764; color: #d8b4fe; }
+    footer {
+      margin-top: 60px;
+      padding: 24px 48px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Nexetra Local AI Video Production Factory</h1>
+  <div class="meta">
+    <span>📅 Created: 2026-06-08</span>
+    <span>🗂 Workspace: nexetra-media</span>
+    <span>🖥 Lab: Mac Mini M4 ×6 + DGX Spark + ubuntu-1</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <h2>Goal</h2>
+  <p>Multi-lingual promotional video pipeline running <strong>90%+ locally</strong> on the Mac Mini lab + DGX Spark.
+  One trigger → script → translated voices → visuals → assembled multi-format video bundle per language.
+  Claude used only as a script QA call (~$0.01–0.05 per video).</p>
+
+  <h2>Lab Role Assignment</h2>
+  <table>
+    <tr><th>Machine</th><th>IP</th><th>Role</th></tr>
+    <tr><td>DGX Spark</td><td>10.0.0.7</td><td>Large LLM (script gen), ComfyUI visuals, talking head, Whisper subtitles</td></tr>
+    <tr><td>Mac Mini 01</td><td>10.0.0.242</td><td>Translation worker (Ollama 8B)</td></tr>
+    <tr><td>Mac Mini 02</td><td>10.0.0.235</td><td>Translation worker (Ollama 8B)</td></tr>
+    <tr><td>Mac Mini 03</td><td>10.0.0.45</td><td>TTS worker (XTTS-v2 + Kokoro)</td></tr>
+    <tr><td>Mac Mini 04</td><td>10.0.0.241</td><td>TTS worker (XTTS-v2 + Kokoro)</td></tr>
+    <tr><td>Mac Mini 05</td><td>10.0.0.113</td><td>Assembly + FFmpeg multi-format export</td></tr>
+    <tr><td>Mac Mini 06</td><td>10.0.0.3</td><td>Orchestration client + QA + evidence capture</td></tr>
+    <tr><td>ubuntu-1</td><td>10.0.0.200</td><td>n8n orchestrator, artifact storage, run manifests</td></tr>
+  </table>
+  <p class="section-intro">Hardware: Mac Minis are M4 16GB. DGX Spark handles all GPU-heavy work.</p>
+
+  <h2>Target Languages</h2>
+  <p>English (master) + Spanish, French, German, Portuguese, Arabic, Mandarin, Cantonese, Hindi, Japanese, Nordic (SV/NO/DA/FI) + additional markets per RTT test results.</p>
+  <p>
+    <span class="tier-tag tier1">Tier 1 &lt;100ms</span> produced first per batch run &nbsp;·&nbsp;
+    <span class="tier-tag tier2">Tier 2 100–200ms</span> second &nbsp;·&nbsp;
+    <span class="tier-tag tier3">Tier 3 200ms+</span> last
+  </p>
+  <p style="color:var(--yellow); margin-top:10px;">⚠ RTT test results to be supplied by user to configure tier order.</p>
+
+  <h2>Output Formats</h2>
+  <p>All derived from one master production per video:</p>
+  <ul>
+    <li><strong>YouTube</strong> — 16:9, 60–90 sec promo</li>
+    <li><strong>Instagram / TikTok Reels</strong> — 9:16 vertical short</li>
+    <li><strong>LinkedIn</strong> — 1:1 square or 16:9</li>
+  </ul>
+
+  <h2>Video Styles</h2>
+  <p>Mix of three, chosen per use case at job definition time:</p>
+  <ol>
+    <li><strong>AI avatar / talking head</strong> — Nexetra persona photo driven by TTS audio (SadTalker / MuseTalk on DGX Spark)</li>
+    <li><strong>Slides + voiceover</strong> — Manim animated text/graphics + narration (Mac Mini 05)</li>
+    <li><strong>AI visuals + voiceover</strong> — ComfyUI B-roll + narration (cinematic/product style, DGX Spark)</li>
+  </ol>
+
+  <h2>Architecture</h2>
+  <div class="arch-box">
+    <pre>Orchestrator (ubuntu-1 · n8n + Archon)
+├── Script Agent        → DGX Spark (Ollama Qwen2.5 72B Q4)
+│   └── QA pass         → Claude API (1 call per video, optional ~$0.01–0.05)
+├── Translation Agent   → Mac Minis 01+02 (Ollama Llama3.1 8B, parallelized)
+├── TTS Agent           → Mac Minis 03+04 (XTTS-v2 / Kokoro / Edge-TTS fallback)
+├── Visual Agent        → DGX Spark (ComfyUI: FLUX + CogVideoX + SadTalker)
+│   └── Slides path     → Mac Mini 05 (Manim)
+├── Assembly Agent      → Mac Mini 05 (FFmpeg + MoviePy)
+└── Export Agent        → Mac Mini 06 (multi-format crop + caption burn-in)</pre>
+  </div>
+
+  <h2>Phases</h2>
+
+  <div class="phase-block">
+    <h3>Phase 0 — Foundation</h3>
+    <p>Install and wire up all services.</p>
+    <ol>
+      <li>Ollama + <strong>Qwen2.5 72B Q4</strong> (or Llama3.3 70B Q4) on DGX Spark — the script brain</li>
+      <li>Ollama + <strong>Llama3.1 8B</strong> on Mac Minis 01+02 — translation workers</li>
+      <li><strong>Coqui XTTS-v2</strong> on Mac Minis 03+04 — 17-language local TTS</li>
+      <li><strong>Kokoro TTS</strong> on Mac Minis 03+04 — fast EN voices + extras</li>
+      <li><strong>Edge-TTS</strong> on Mac Mini 06 — free MS API, covers Cantonese + Nordic gaps</li>
+      <li><strong>ComfyUI</strong> on DGX Spark with FLUX (images), CogVideoX/Wan2.1 (video), SadTalker/MuseTalk (talking head)</li>
+      <li><strong>Whisper.cpp</strong> on DGX Spark — local subtitle generation</li>
+      <li><strong>n8n</strong> self-hosted on ubuntu-1 — visual workflow trigger UI</li>
+      <li><strong>Archon</strong> on ubuntu-1 / Mac Mini 05 — YAML deterministic workflow spec</li>
+      <li>Scaffold <code>nexetra-media/</code> workspace</li>
+    </ol>
+    <pre>nexetra-media/
+├── pipeline/
+│   ├── scriptgen/
+│   ├── translate/
+│   ├── tts/
+│   ├── visuals/
+│   ├── assembly/
+│   └── export/
+├── templates/       ← script templates, brand assets
+├── jobs/            ← per-video job JSON files
+├── output/          ← dated artifact folders
+└── docs/            ← this file + runbooks</pre>
+  </div>
+
+  <div class="phase-block">
+    <h3>Phase 1 — Script + Translation Engine</h3>
+    <ol>
+      <li>Build Nexetra script templates — JSON/YAML structures per video type (hook + body + CTA)</li>
+      <li>Build <code>scriptgen</code> agent — Ollama prompt chain on DGX Spark → structured script</li>
+      <li>Optional: 1× Claude API call per video for tone/quality polish</li>
+      <li>Build <code>translate</code> agent — fan-out Ollama calls across Mac Minis 01+02 in parallel</li>
+      <li>Ingest RTT test results → build language tier list</li>
+    </ol>
+  </div>
+
+  <div class="phase-block">
+    <h3>Phase 2 — Voice Engine</h3>
+    <p>Map each language to a TTS engine:</p>
+    <table>
+      <tr><th>Language Group</th><th>Engine</th><th>Where</th></tr>
+      <tr><td>ES, FR, DE, PT, HI, ZH, JA, AR</td><td>XTTS-v2 (local)</td><td>Mac Minis 03+04</td></tr>
+      <tr><td>EN (primary)</td><td>Kokoro TTS (local)</td><td>Mac Minis 03+04</td></tr>
+      <tr><td>Cantonese, Nordic (SV/NO/DA/FI)</td><td>Edge-TTS (free MS API)</td><td>Mac Mini 06</td></tr>
+    </table>
+    <ol>
+      <li>Build <code>tts</code> agent — translated script segment → WAV file per language</li>
+      <li>FFmpeg post-process — LUFS normalization, silence trimming, sample rate standardization</li>
+    </ol>
+  </div>
+
+  <div class="phase-block">
+    <h3>Phase 3 — Visual Engine (DGX Spark)</h3>
+    <ol>
+      <li><strong>Talking head path</strong> — SadTalker/MuseTalk drives Nexetra persona photo with TTS audio → MP4</li>
+      <li><strong>B-roll path</strong> — ComfyUI + FLUX generates scene stills from script keywords</li>
+      <li><strong>Slides path</strong> — Manim (Python, 100% local) animated text/graphic explainers on Mac Mini 05</li>
+      <li>Build Nexetra brand overlay layer — logo watermark, color palette, font overlays</li>
+    </ol>
+  </div>
+
+  <div class="phase-block">
+    <h3>Phase 4 — Assembly + Export</h3>
+    <ol>
+      <li>FFmpeg + MoviePy stitches audio + visuals → master 16:9 MP4 with brand watermark</li>
+      <li>Whisper.cpp generates <code>.SRT</code> per language → burned in or sidecar</li>
+      <li>Format exporter crops master:
+        <code>16x9.mp4</code> (YouTube) · <code>9x16.mp4</code> (Reels) · <code>1x1.mp4</code> (LinkedIn)</li>
+      <li>Output path: <code>output/YYYYMMDD-HHMMSS/{video_id}/{lang}/{format}.mp4</code></li>
+    </ol>
+  </div>
+
+  <div class="phase-block">
+    <h3>Phase 5 — Orchestration</h3>
+    <ol>
+      <li>Wire all agents into n8n workflow on ubuntu-1 (webhook or cron trigger)</li>
+      <li>Mirror as Archon YAML spec — deterministic, CLI-runnable</li>
+      <li>Per-video job JSON file drives each run (title, languages, style, CTA text)</li>
+      <li>Run manifests + per-stage logs: <code>run_manifest.json</code>, <code>run_summary.md</code> (PASS/FAIL)</li>
+    </ol>
+  </div>
+
+  <div class="phase-block">
+    <h3>Phase 6 — Language Prioritization</h3>
+    <ol>
+      <li>Ingest RTT test result CSV/JSON from user</li>
+      <li>Build tier list: <span class="tier-tag tier1">Tier 1 &lt;100ms</span> <span class="tier-tag tier2">Tier 2 100–200ms</span> <span class="tier-tag tier3">Tier 3 200ms+</span></li>
+      <li>Job queue: Tier 1 languages processed first in every batch run</li>
+      <li>Output folder tagging by tier for reporting</li>
+    </ol>
+  </div>
+
+  <h2>Tool Reference</h2>
+  <table>
+    <tr><th>Tool</th><th>Cost</th><th>Host</th></tr>
+    <tr><td>Ollama + Qwen2.5 72B Q4</td><td><span class="badge badge-free">FREE</span></td><td>DGX Spark</td></tr>
+    <tr><td>Ollama + Llama3.1 8B</td><td><span class="badge badge-free">FREE</span></td><td>Mac Minis 01+02</td></tr>
+    <tr><td>Coqui XTTS-v2</td><td><span class="badge badge-free">FREE</span></td><td>Mac Minis 03+04</td></tr>
+    <tr><td>Kokoro TTS</td><td><span class="badge badge-free">FREE</span></td><td>Mac Minis 03+04</td></tr>
+    <tr><td>Edge-TTS</td><td><span class="badge badge-free">FREE (MS API)</span></td><td>Mac Mini 06</td></tr>
+    <tr><td>ComfyUI + FLUX</td><td><span class="badge badge-free">FREE</span></td><td>DGX Spark</td></tr>
+    <tr><td>ComfyUI + CogVideoX / Wan2.1</td><td><span class="badge badge-free">FREE</span></td><td>DGX Spark</td></tr>
+    <tr><td>SadTalker / MuseTalk</td><td><span class="badge badge-free">FREE</span></td><td>DGX Spark</td></tr>
+    <tr><td>Whisper.cpp</td><td><span class="badge badge-free">FREE</span></td><td>DGX Spark</td></tr>
+    <tr><td>Manim</td><td><span class="badge badge-free">FREE</span></td><td>Mac Mini 05</td></tr>
+    <tr><td>FFmpeg + MoviePy</td><td><span class="badge badge-free">FREE</span></td><td>Mac Mini 05</td></tr>
+    <tr><td>n8n (self-hosted)</td><td><span class="badge badge-free">FREE</span></td><td>ubuntu-1</td></tr>
+    <tr><td>Archon</td><td><span class="badge badge-free">FREE</span></td><td>ubuntu-1</td></tr>
+    <tr><td>Claude API</td><td><span class="badge badge-cloud">~$0.01–0.05/video</span></td><td>Cloud (QA only)</td></tr>
+  </table>
+
+  <h2>MVP First Run Target</h2>
+  <div class="mvp-box">
+    <div class="number">9 files</div>
+    <p>A 60-second <strong>"What is Nexetra?"</strong> video:</p>
+    <ul>
+      <li>English master → Spanish + French translations</li>
+      <li>3 languages × 3 formats = <strong>9 output files</strong> from one production run</li>
+      <li>Validates the full pipeline before scaling to all languages</li>
+    </ul>
+  </div>
+
+  <h2>Verification Gates</h2>
+  <ol>
+    <li>End-to-end dry run: EN-only job → TTS → static visual → 16:9 MP4 assembled</li>
+    <li>Talking head render: Nexetra persona photo + EN audio on DGX Spark</li>
+    <li>Spanish + Mandarin: translation + XTTS-v2 audio quality check</li>
+    <li>Format export: all 3 crops from one master confirmed</li>
+    <li>n8n full workflow trigger → all stages log PASS/FAIL</li>
+    <li>Output folder structure matches artifact storage convention</li>
+  </ol>
+
+  <h2>Open Items</h2>
+  <ul class="checklist">
+    <li>User to supply RTT test results for language tier prioritization</li>
+    <li>Confirm Nexetra persona / avatar photo for talking head (or decide on AI-generated mascot)</li>
+    <li>Decide whether a human presenter is available (simplifies Phase 3 significantly)</li>
+    <li>Decide n8n vs Archon as primary trigger (recommendation: start Archon CLI first, add n8n UI in Phase 5)</li>
+    <li>Confirm first video brief / script direction for MVP run</li>
+  </ul>
+
+</div>
+
+<footer>
+  Nexetra AI Video Production Plan · Created 2026-06-08 · nexetra-media/docs/nexetra-video-pipeline-plan-20260608.html
+</footer>
+
+</body>
+</html>
