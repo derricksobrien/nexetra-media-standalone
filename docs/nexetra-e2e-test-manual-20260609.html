@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nexetra Media E2E Test Manual (2026-06-09)</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --text: #18243d;
+      --muted: #5a6784;
+      --border: #d8dfef;
+      --accent: #0b63f6;
+      --ok: #147a34;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: linear-gradient(180deg, #eff4ff, var(--bg));
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(20, 40, 80, 0.08);
+    }
+    h1, h2 { margin-top: 0; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 20px; margin-top: 26px; }
+    p, li { line-height: 1.55; }
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f1f5ff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow-x: auto; }
+    .ok {
+      color: var(--ok);
+      font-weight: 700;
+    }
+    .shot {
+      margin: 16px 0 24px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .shot img {
+      width: 100%;
+      display: block;
+    }
+    .cap {
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      background: #fbfcff;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Nexetra Media E2E Test Manual (2026-06-09)</h1>
+
+    <h2>Purpose</h2>
+    <p>This manual documents a complete end-to-end validation run of the Nexetra Media pipeline and dashboard, including screenshots and reproducible commands.</p>
+
+    <h2>Test Summary</h2>
+    <ul>
+      <li>Date: 2026-06-09</li>
+      <li>Dashboard URL: <a href="http://10.0.0.200:7800">http://10.0.0.200:7800</a></li>
+      <li>Validated pipeline path: local orchestrator (<code>pipeline/run_job.py</code>) with DGX-backed translation and full media export</li>
+      <li>Result: <span class="ok">Success</span></li>
+    </ul>
+
+    <h2>Screenshot Set</h2>
+    <ul>
+      <li><code>docs/screenshots/e2e-2026-06-09/01-dashboard-before.png</code></li>
+      <li><code>docs/screenshots/e2e-2026-06-09/02-dashboard-during.png</code></li>
+      <li><code>docs/screenshots/e2e-2026-06-09/03-dashboard-after.png</code></li>
+    </ul>
+
+    <div class="shot">
+      <img src="screenshots/e2e-2026-06-09/01-dashboard-before.png" alt="Dashboard before run" />
+      <div class="cap">Dashboard before run</div>
+    </div>
+
+    <div class="shot">
+      <img src="screenshots/e2e-2026-06-09/02-dashboard-during.png" alt="Dashboard during run" />
+      <div class="cap">Dashboard during run</div>
+    </div>
+
+    <div class="shot">
+      <img src="screenshots/e2e-2026-06-09/03-dashboard-after.png" alt="Dashboard after run" />
+      <div class="cap">Dashboard after run</div>
+    </div>
+
+    <h2>Preconditions</h2>
+    <ol>
+      <li>Activate the repo virtual environment at <code>nexetra-media/.venv</code>.</li>
+      <li>Confirm dashboard service is running on <code>ubuntu-1</code>.</li>
+      <li>Confirm <code>jobs/what-is-nexetra-live-es.json</code> exists.</li>
+    </ol>
+
+    <h2>E2E Execution Steps</h2>
+    <ol>
+      <li>Open a terminal in <code>nexetra-media</code>.</li>
+      <li>Run the end-to-end pipeline:</li>
+    </ol>
+
+    <pre><code>.\.venv\Scripts\python pipeline\run_job.py --job jobs\what-is-nexetra-live-es.json</code></pre>
+
+    <ol start="3">
+      <li>Confirm all stages pass: <code>scriptgen</code>, <code>translate</code>, <code>tts</code>, <code>assembly</code>, <code>export</code>.</li>
+      <li>Expected final line: <code>Pipeline completed successfully.</code></li>
+    </ol>
+
+    <h2>Verified Stage Output (From Run)</h2>
+    <ul>
+      <li>Script generation wrote <code>output/what-is-nexetra-live-es/en/script.json</code></li>
+      <li>Translation wrote <code>output/what-is-nexetra-live-es/es/script.json</code></li>
+      <li>TTS wrote WAV files for EN and ES</li>
+      <li>Assembly wrote <code>master_16x9.mp4</code> for EN and ES</li>
+      <li>Export wrote <code>16x9.mp4</code>, <code>9x16.mp4</code>, <code>1x1.mp4</code> for EN and ES</li>
+    </ul>
+
+    <h2>Output Locations</h2>
+    <ul>
+      <li>Run root: <code>output/what-is-nexetra-live-es</code></li>
+      <li>English assets: <code>output/what-is-nexetra-live-es/en</code></li>
+      <li>Spanish assets: <code>output/what-is-nexetra-live-es/es</code></li>
+      <li>Dashboard history/state:
+        <code>output/job_runs.jsonl</code>,
+        <code>output/compute_pool/health-latest.json</code>,
+        <code>output/compute_pool/leases.json</code>
+      </li>
+    </ul>
+
+    <h2>Dashboard Validation Checklist</h2>
+    <ol>
+      <li>Open <a href="http://10.0.0.200:7800">http://10.0.0.200:7800</a>.</li>
+      <li>In Batch Jobs, confirm cards show stage progress, estimated runtimes, and direct output links.</li>
+      <li>Open at least one folder link and one download link.</li>
+    </ol>
+
+    <h2>Notes</h2>
+    <p>A separate pool-orchestrated run with a temporary new job file failed because that file did not exist on the remote execution anchor host. The final validated E2E result in this manual is from the successful full local orchestration run.</p>
+  </main>
+</body>
+</html>

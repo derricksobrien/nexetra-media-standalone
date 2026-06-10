@@ -91,6 +91,34 @@ Detailed timestamped plans:
 4. Add one visual path (slides first) before expanding to talking head and B-roll
 5. Wire first end-to-end run with logs and pass/fail summary
 
+## Distributed Compute Pool Runner
+
+For batch operations, use the pool-aware runner:
+
+- Command:
+   - `python pipeline/run_batch_pool.py --job jobs/what-is-nexetra-live-es.json --allow-local-fallback`
+
+What it does:
+- Selects only eligible hosts from `workstations.csv`.
+- Hard excludes protected hosts: `linux-1`, `linux-2`, `das-Mac-mini.local`.
+- Attempts remote stage execution on DGX + Lab/ubuntu workers.
+- Always runs a final release step to return compute to the pool.
+
+Release behavior:
+- On batch end (success or failure), it unloads active Ollama models on used hosts if Ollama is present.
+- Removes host leases from `output/compute_pool/leases.json`.
+
+Runner health checks:
+- Standalone check:
+   - `python pipeline/check_runner_health.py`
+- Inline check before a batch:
+   - `python pipeline/run_batch_pool.py --job jobs/what-is-nexetra-live-es.json --health-only`
+
+Lab mini admin bootstrap (one-time):
+- Use `../bootstrap-lab-minis-ollama.ps1` to run the temporary grant -> install -> revoke flow.
+- Dry-run first:
+   - `powershell -ExecutionPolicy Bypass -File ..\bootstrap-lab-minis-ollama.ps1 -AdminUser <admin-user> -WhatIf`
+
 ## Success Criteria
 
 - One command or workflow trigger starts a full run

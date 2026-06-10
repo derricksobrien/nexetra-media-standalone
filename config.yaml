@@ -1,0 +1,28 @@
+project:
+  name: nexetra-media
+
+llm:
+  hermes:
+    base_url: "http://10.0.0.7:11434"
+    model: "gpt-oss:120b"
+
+compute_pool:
+  # Protected machines that must never be touched by distributed batches.
+  deny_hosts:
+    - "linux-1"
+    - "linux-2"
+    - "das-Mac-mini.local"
+
+  # Eligible worker host naming patterns.
+  allow_name_patterns:
+    - "^gx10"
+    - "^Lab-"
+    - "^ubuntu-"
+
+  # The runner will use the first existing path on each remote host.
+  remote_root_candidates:
+    - "/home/gx10/nexetra-media"
+    - "/home/user/nexetra-media"
+    - "~/nexetra-remote-coding/nexetra-media"
+    - "~/Code/nexetra-remote-coding/nexetra-media"
+    - "~/nexetra-media"

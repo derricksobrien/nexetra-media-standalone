@@ -1,0 +1,17 @@
+{
+  "job_id": "what-is-nexetra-live-es",
+  "title": "What is Nexetra?",
+  "duration_seconds": 60,
+  "languages": ["en", "es"],
+  "formats": ["16:9", "9:16", "1:1"],
+  "style": "slides",
+  "cta": "Visit nexetra.com",
+  "stage_estimates_minutes": {
+    "scriptgen": 0.4,
+    "translate": 0.3,
+    "tts": 0.2,
+    "assembly": 0.5,
+    "export": 0.5
+  },
+  "status": "live-test"
+}

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexetra Media Dashboard — User Manual</title>
+  <style>
+    :root{--bg:#0b0f1a;--surface:#131929;--surface2:#1a2338;--border:#253250;
+      --text:#c8d6f0;--muted:#6b7ea8;--accent:#3b82f6;--green:#22c55e;
+      --yellow:#eab308;--red:#ef4444;--purple:#a855f7;--cyan:#06b6d4}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;
+         font-size:15px;line-height:1.65}
+    a{color:var(--accent)}
+    /* nav sidebar */
+    .layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+    nav{background:var(--surface);border-right:1px solid var(--border);padding:24px 16px;
+        position:sticky;top:0;height:100vh;overflow-y:auto;font-size:13px}
+    nav .logo{display:flex;align-items:center;gap:8px;margin-bottom:24px;padding-bottom:16px;
+              border-bottom:1px solid var(--border)}
+    nav .logo h2{font-size:14px;font-weight:700;color:var(--text)}
+    nav .logo span{color:var(--accent)}
+    nav ul{list-style:none;display:flex;flex-direction:column;gap:2px}
+    nav li a{display:block;padding:7px 10px;border-radius:6px;color:var(--muted);
+             text-decoration:none;transition:background .15s,color .15s}
+    nav li a:hover{background:var(--surface2);color:var(--text)}
+    nav .nav-group{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                   color:var(--muted);padding:14px 10px 4px;margin-top:8px}
+    /* content */
+    .content{padding:48px 56px;max-width:900px}
+    .content>*+*{margin-top:24px}
+    h1{font-size:28px;font-weight:800;margin-bottom:6px}
+    h1 span{color:var(--accent)}
+    .subtitle{color:var(--muted);font-size:14px;margin-top:4px!important}
+    h2{font-size:20px;font-weight:700;color:var(--text);margin-top:48px!important;
+       padding-top:12px;border-top:1px solid var(--border)}
+    h3{font-size:16px;font-weight:700;color:var(--accent);margin-top:28px!important}
+    p{color:var(--text)}
+    ul,ol{padding-left:22px;color:var(--text)}
+    li+li{margin-top:4px}
+    code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+         padding:1px 6px;font-family:monospace;font-size:13px;color:var(--cyan)}
+    pre{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+        padding:16px 20px;overflow-x:auto;font-family:monospace;font-size:13px;
+        color:var(--cyan);margin-top:10px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:var(--surface2);padding:8px 12px;text-align:left;color:var(--muted);
+       font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+       border-bottom:1px solid var(--border)}
+    td{padding:8px 12px;border-bottom:1px solid var(--border)}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:var(--surface2)}
+    .table-wrap{background:var(--surface);border:1px solid var(--border);
+                border-radius:8px;overflow:hidden;margin-top:12px}
+    /* callout */
+    .note{background:#1d4ed820;border:1px solid #1e40af;border-radius:8px;
+          padding:12px 16px;font-size:13px;color:#93c5fd;margin-top:12px}
+    .warn{background:#78350f20;border:1px solid #92400e;border-radius:8px;
+          padding:12px 16px;font-size:13px;color:#fbbf24;margin-top:12px}
+    /* screenshot */
+    .screenshot{margin-top:16px;border-radius:10px;overflow:hidden;
+                border:1px solid var(--border);box-shadow:0 4px 24px #00000060}
+    .screenshot img{display:block;width:100%}
+    .caption{font-size:12px;color:var(--muted);text-align:center;
+             margin-top:6px!important;font-style:italic}
+    /* status pill demo */
+    .pill-demo{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .pill{font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600}
+    .p-green{background:#16a34a20;color:#4ade80;border:1px solid #166534}
+    .p-yellow{background:#78350f20;color:#fbbf24;border:1px solid #92400e}
+    .p-red{background:#7f1d1d20;color:#f87171;border:1px solid #7f1d1d}
+    .p-purple{background:#4c1d9520;color:#c084fc;border:1px solid #5b21b6}
+    .p-blue{background:#1d4ed820;color:#60a5fa;border:1px solid #1e40af}
+    .p-gray{background:#1f293750;color:#6b7ea8;border:1px solid #374151}
+    /* url box */
+    .url-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+             padding:14px 20px;margin-top:12px;display:flex;align-items:center;gap:12px}
+    .url-box .url-label{font-size:11px;color:var(--muted);text-transform:uppercase;
+                        letter-spacing:.06em;white-space:nowrap}
+    .url-box .url-value{font-family:monospace;font-size:16px;color:var(--accent);
+                        font-weight:700}
+    /* pipeline diagram */
+    .pipe-demo{display:flex;gap:0;margin-top:12px;background:var(--surface);
+               border:1px solid var(--border);border-radius:8px;padding:16px}
+    .ps{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
+    .ps:not(:last-child)::after{content:'';position:absolute;left:calc(50% + 14px);
+      right:calc(-50% + 14px);top:14px;height:2px;background:var(--border)}
+    .ps.done::after{background:var(--green)}
+    .pd{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+        justify-content:center;font-size:11px;font-weight:800;border:2px solid;
+        position:relative;z-index:1;margin-bottom:5px}
+    .pd-done{background:#16a34a20;border-color:var(--green);color:var(--green)}
+    .pd-run{background:#1d4ed820;border-color:var(--accent);color:var(--accent)}
+    .pd-pend{background:transparent;border-color:var(--border);color:var(--muted)}
+    .pl{font-size:9px;color:var(--muted)}
+    /* footer */
+    footer{margin-top:80px;padding:24px 0;border-top:1px solid var(--border);
+           color:var(--muted);font-size:12px;text-align:center}
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar nav -->
+<nav>
+  <div class="logo">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+    </svg>
+    <h2>Nexetra <span>Media</span></h2>
+  </div>
+  <ul>
+    <li class="nav-group">Getting Started</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#access">Access the Dashboard</a></li>
+    <li class="nav-group">Dashboard Sections</li>
+    <li><a href="#header">Header Bar</a></li>
+    <li><a href="#stats">Pool Overview</a></li>
+    <li><a href="#nodes">Node Health Grid</a></li>
+    <li><a href="#jobs">Batch Jobs</a></li>
+    <li><a href="#history">Event History</a></li>
+    <li class="nav-group">Operations</li>
+    <li><a href="#running">Running a Batch</a></li>
+    <li><a href="#stages">Individual Stages</a></li>
+    <li><a href="#new-job">Adding a New Job</a></li>
+    <li class="nav-group">Administration</li>
+    <li><a href="#service">Managing the Service</a></li>
+    <li><a href="#config">Pool Configuration</a></li>
+    <li><a href="#provision">Provisioning Hosts</a></li>
+    <li><a href="#api">Dashboard API</a></li>
+    <li><a href="#files">File Locations</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+  </ul>
+</nav>
+
+<!-- Main content -->
+<div class="content">
+  <h1>Nexetra <span>Media</span> Dashboard</h1>
+  <p class="subtitle">User Manual &nbsp;·&nbsp; Version 1.0 &nbsp;·&nbsp; 2026-06-09</p>
+
+  <!-- ── OVERVIEW ── -->
+  <h2 id="overview">Overview</h2>
+  <p>The Nexetra Media Compute Dashboard is a real-time web application that gives you a single-pane view of your distributed AI video production pipeline.</p>
+  <ul style="margin-top:10px">
+    <li><strong>Node health</strong> — every eligible compute host, capabilities, and active job status</li>
+    <li><strong>Batch jobs</strong> — per-job progress through the 5-stage media pipeline with AI goal descriptions</li>
+    <li><strong>Event history</strong> — timestamped log of every stage start, pass, fail, and completion</li>
+    <li><strong>Pool statistics</strong> — remote-ready, reachable, Ollama nodes, active leases, jobs defined</li>
+  </ul>
+  <p style="margin-top:10px">The dashboard auto-updates every <strong>4 seconds</strong> via Server-Sent Events (SSE). No manual refresh needed. Protected hosts (<code>linux-1</code>, <code>linux-2</code>, <code>das-Mac-mini.local</code>, <code>sql-server</code>) are never shown.</p>
+
+  <div class="screenshot">
+    <img src="https://i.imgur.com/placeholder-overview.png" alt="Dashboard overview — node health populated, 2 remote-ready nodes" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'"/>
+    <div style="display:none;padding:60px;text-align:center;background:var(--surface2);color:var(--muted)">
+      Screenshot: Full dashboard showing Pool Overview stats (2 Remote Ready, 9 Reachable, 5 Ollama Nodes), Node Health grid, Batch Jobs, and Event History
+    </div>
+  </div>
+  <p class="caption">Figure 1 — Full dashboard: 2 remote-ready nodes (gx10-ae44, ubuntu-1), 9 reachable hosts, 5 Ollama nodes visible</p>
+
+  <!-- ── ACCESS ── -->
+  <h2 id="access">Access the Dashboard</h2>
+  <div class="url-box">
+    <span class="url-label">URL</span>
+    <span class="url-value">http://10.0.0.200:7800</span>
+  </div>
+  <p style="margin-top:12px">Accessible from any machine on the lab network. No authentication required — it is an internal read-only monitoring tool.</p>
+
+  <!-- ── HEADER ── -->
+  <h2 id="header">Header Bar</h2>
+  <p>The top bar shows:</p>
+  <ul style="margin-top:8px">
+    <li>Application name and logo</li>
+    <li>A <strong>LIVE</strong> badge with a green pulsing dot confirming the SSE connection is active</li>
+    <li>An <strong>"Updated HH:MM:SS"</strong> timestamp showing when data was last refreshed</li>
+  </ul>
+  <p style="margin-top:8px">If the SSE connection drops, the badge changes to <strong>"⚠ Reconnecting…"</strong> and automatically reconnects.</p>
+
+  <!-- ── STATS ── -->
+  <h2 id="stats">Pool Overview (Stats Bar)</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Card</th><th>Colour</th><th>Meaning</th></tr>
+      <tr><td>Remote Ready</td><td style="color:var(--green)">Green</td><td>Hosts with nexetra-media deployed and a working <code>.venv</code></td></tr>
+      <tr><td>Reachable</td><td style="color:var(--yellow)">Yellow</td><td>Hosts that are online but not yet fully provisioned</td></tr>
+      <tr><td>Ollama Nodes</td><td style="color:var(--accent)">Blue</td><td>Hosts running the Ollama model server</td></tr>
+      <tr><td>Active Leases</td><td style="color:var(--purple)">Purple</td><td>Hosts currently locked by a running batch job</td></tr>
+      <tr><td>Jobs Defined</td><td style="color:var(--green)">Green</td><td>Number of job JSON files in <code>jobs/</code></td></tr>
+    </table>
+  </div>
+
+  <!-- ── NODES ── -->
+  <h2 id="nodes">Node Health Grid</h2>
+  <p>Each eligible compute host appears as a card. Cards update live as health state changes.</p>
+
+  <h3>Card border colours</h3>
+  <div class="pill-demo">
+    <span class="pill p-green">Green — Remote Ready</span>
+    <span class="pill p-yellow">Yellow — Reachable</span>
+    <span class="pill p-red">Red — Offline</span>
+    <span class="pill p-purple">Purple (animated) — Running a job</span>
+  </div>
+
+  <h3>Capability pills</h3>
+  <div class="pill-demo" style="margin-top:8px">
+    <span class="pill p-green">Ollama</span>
+    <span class="pill p-green">vLLM</span>
+    <span class="pill p-green">Remote✓</span>
+    <span class="pill p-gray">Ollama (inactive)</span>
+  </div>
+  <p style="margin-top:10px">When a host is leased for a job, its card turns purple, shows "⚡ Running", and displays the job name at the bottom.</p>
+
+  <div class="note">Hosts in the deny list (<code>linux-1</code>, <code>linux-2</code>, <code>das-Mac-mini.local</code>, <code>sql-server</code>) are never shown in the dashboard, regardless of their online status.</div>
+
+  <!-- ── JOBS ── -->
+  <h2 id="jobs">Batch Jobs</h2>
+  <p>Each job defined in <code>jobs/*.json</code> appears as a card.</p>
+
+  <h3>Status badges</h3>
+  <div class="pill-demo">
+    <span class="pill p-blue">running (animated)</span>
+    <span class="pill p-green">complete</span>
+    <span class="pill p-purple">live-test</span>
+    <span class="pill p-gray">draft</span>
+  </div>
+
+  <h3>Pipeline progress tracker</h3>
+  <p style="margin-top:8px">Five dots representing each stage in the pipeline:</p>
+  <div class="pipe-demo">
+    <div class="ps done"><div class="pd pd-done">S</div><div class="pl">scriptgen</div></div>
+    <div class="ps done"><div class="pd pd-done">T</div><div class="pl">translate</div></div>
+    <div class="ps done"><div class="pd pd-done">♪</div><div class="pl">tts</div></div>
+    <div class="ps done"><div class="pd pd-done">A</div><div class="pl">assembly</div></div>
+    <div class="ps"><div class="pd pd-pend">E</div><div class="pl">export</div></div>
+  </div>
+  <ul style="margin-top:10px">
+    <li><strong>Green filled</strong> — stage completed and artifacts exist on disk</li>
+    <li><strong>Blue pulsing</strong> — stage is currently executing (host is leased)</li>
+    <li><strong>Grey outlined</strong> — not yet started</li>
+  </ul>
+
+  <p style="margin-top:10px">Each card also shows:</p>
+  <ul>
+    <li><strong>Goal sentence</strong> — auto-generated description of what this job produces</li>
+    <li><strong>Progress bar</strong> — percentage complete across all 5 stages</li>
+    <li><strong>Meta tags</strong> — languages, export formats, and the job ID</li>
+  </ul>
+
+  <!-- ── HISTORY ── -->
+  <h2 id="history">Event History</h2>
+  <p>A scrollable table showing the last 60 events from all batch runs (most-recent first):</p>
+  <div class="table-wrap" style="margin-top:12px">
+    <table>
+      <tr><th>Column</th><th>Contents</th></tr>
+      <tr><td>Time</td><td>Local time the event was recorded</td></tr>
+      <tr><td>Job</td><td>Job ID (path and extension stripped)</td></tr>
+      <tr><td>Stage</td><td>Pipeline stage name, or blank for batch-level events</td></tr>
+      <tr><td>Event</td><td><code>batch_start</code>, <code>stage_start</code>, <code>stage_pass</code>, <code>stage_fail</code>, <code>batch_done</code>, <code>batch_fail</code></td></tr>
+      <tr><td>Detail</td><td>Host name, host list, or error context (monospaced)</td></tr>
+    </table>
+  </div>
+  <p style="margin-top:10px">Events are colour-coded: blue = start, green = pass/done, red = fail, dim = release.</p>
+  <p>History is stored in <code>output/job_runs.jsonl</code> and persists across service restarts.</p>
+
+  <!-- ── RUNNING ── -->
+  <h2 id="running">Running a Batch Job</h2>
+
+  <h3>Standard run</h3>
+  <pre>cd nexetra-media
+python pipeline\run_batch_pool.py --job jobs\what-is-nexetra-live-es.json</pre>
+  <p style="margin-top:8px">The runner will:</p>
+  <ol style="margin-top:6px">
+    <li>Run a health check across all eligible hosts</li>
+    <li>Acquire leases on remote-ready hosts only</li>
+    <li>Execute all 5 stages on the anchor host</li>
+    <li>Log every stage event to <code>output/job_runs.jsonl</code></li>
+    <li>Release all leases when done (pass or fail)</li>
+  </ol>
+
+  <h3>Dry run (no LLM/TTS calls)</h3>
+  <pre>python pipeline\run_batch_pool.py --job jobs\what-is-nexetra-live-es.json --dry-run</pre>
+
+  <h3>Local fallback (if remote hosts unavailable)</h3>
+  <pre>python pipeline\run_batch_pool.py --job jobs\what-is-nexetra-live-es.json --allow-local-fallback</pre>
+
+  <h3>Health check only</h3>
+  <pre>python pipeline\run_batch_pool.py --job jobs\what-is-nexetra-live-es.json --health-only</pre>
+
+  <div class="note">The dashboard updates automatically as events are written. There is no need to reload the page.</div>
+
+  <!-- ── STAGES ── -->
+  <h2 id="stages">Running Individual Stages</h2>
+  <p>Each pipeline stage can be invoked directly:</p>
+  <pre>python pipeline\scriptgen\agent.py --job jobs\what-is-nexetra-live-es.json
+python pipeline\translate\agent.py --job jobs\what-is-nexetra-live-es.json
+python pipeline\tts\agent.py       --job jobs\what-is-nexetra-live-es.json
+python pipeline\assembly\agent.py  --job jobs\what-is-nexetra-live-es.json
+python pipeline\export\agent.py    --job jobs\what-is-nexetra-live-es.json</pre>
+  <p style="margin-top:8px">Add <code>--dry-run</code> to any stage to skip external calls and write placeholder files.</p>
+
+  <!-- ── NEW JOB ── -->
+  <h2 id="new-job">Adding a New Job</h2>
+  <p>Create a JSON file in <code>nexetra-media/jobs/</code>:</p>
+  <pre>{
+  "job_id": "product-demo-fr",
+  "title": "Nexetra Product Demo",
+  "duration_seconds": 60,
+  "languages": ["en", "fr", "de"],
+  "formats": ["16:9", "9:16", "1:1"],
+  "style": "slides",
+  "cta": "Book a demo at nexetra.com",
+  "status": "draft"
+}</pre>
+  <p style="margin-top:8px">The dashboard shows the new job card within 4 seconds (next SSE cycle). Run it with:</p>
+  <pre>python pipeline\run_batch_pool.py --job jobs\product-demo-fr.json</pre>
+
+  <!-- ── SERVICE ── -->
+  <h2 id="service">Managing the Dashboard Service</h2>
+  <p>The viewer runs as a <strong>systemd user service</strong> on ubuntu-1 (<code>10.0.0.200</code>).</p>
+
+  <h3>Check status (SSH)</h3>
+  <pre>ssh user@10.0.0.200
+systemctl --user status nexetra-viewer</pre>
+
+  <h3>View live logs</h3>
+  <pre>journalctl --user -u nexetra-viewer -f</pre>
+
+  <h3>Redeploy after code changes</h3>
+  <pre># From nexetra-media/ on your local machine
+python viewer\deploy.py --host ubuntu-1</pre>
+
+  <h3>Restart without re-syncing code</h3>
+  <pre>python viewer\deploy.py --host ubuntu-1 --restart-only</pre>
+
+  <h3>Stop / Start manually</h3>
+  <pre>systemctl --user stop nexetra-viewer
+systemctl --user start nexetra-viewer</pre>
+
+  <div class="note">The service is enabled at user login and auto-restarts after crashes with a 5-second back-off.</div>
+
+  <!-- ── CONFIG ── -->
+  <h2 id="config">Pool Configuration</h2>
+  <p>Edit <code>nexetra-media/config.yaml</code>:</p>
+  <pre>compute_pool:
+  deny_hosts:           # Never touched — mission-critical hosts
+    - "linux-1"
+    - "linux-2"
+    - "das-Mac-mini.local"
+
+  allow_name_patterns:  # Only these patterns are eligible
+    - "^gx10"
+    - "^Lab-"
+    - "^ubuntu-"
+
+  remote_root_candidates:  # Where to find nexetra-media on each remote host
+    - "/home/gx10/nexetra-media"
+    - "/home/user/nexetra-media"
+    - "~/nexetra-media"</pre>
+
+  <!-- ── PROVISION ── -->
+  <h2 id="provision">Provisioning New Remote Hosts</h2>
+  <ol style="margin-top:8px">
+    <li>Ensure the host appears in <code>workstations.csv</code> (name, IP, username)</li>
+    <li>Add its password to <code>secrets.local.md</code> in the standard block format</li>
+    <li>Deploy the runtime:<br/><pre style="margin-top:6px">python viewer\deploy.py --host ubuntu-3</pre></li>
+  </ol>
+  <p style="margin-top:8px">The host will appear as <strong>Remote✓</strong> in the dashboard within 4 seconds of the next health check.</p>
+
+  <!-- ── API ── -->
+  <h2 id="api">Dashboard API</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Endpoint</th><th>Description</th></tr>
+      <tr><td><code>GET /api/snapshot</code></td><td>Full JSON snapshot — health, leases, jobs, history</td></tr>
+      <tr><td><code>GET /events</code></td><td>SSE stream of snapshots (used internally by the UI)</td></tr>
+    </table>
+  </div>
+  <pre style="margin-top:12px">curl http://10.0.0.200:7800/api/snapshot | python -m json.tool</pre>
+
+  <!-- ── FILES ── -->
+  <h2 id="files">File Locations</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>File</th><th>Purpose</th></tr>
+      <tr><td><code>viewer/app.py</code></td><td>FastAPI backend + SSE server</td></tr>
+      <tr><td><code>viewer/templates/index.html</code></td><td>Dashboard HTML/JS/CSS</td></tr>
+      <tr><td><code>viewer/deploy.py</code></td><td>One-command remote deployment</td></tr>
+      <tr><td><code>output/compute_pool/health-latest.json</code></td><td>Latest node health snapshot</td></tr>
+      <tr><td><code>output/compute_pool/leases.json</code></td><td>Active batch leases</td></tr>
+      <tr><td><code>output/job_runs.jsonl</code></td><td>Append-only event history log</td></tr>
+      <tr><td><code>jobs/*.json</code></td><td>Job definitions</td></tr>
+      <tr><td><code>output/&lt;job_id&gt;/&lt;lang&gt;/</code></td><td>Stage artifacts per job and language</td></tr>
+    </table>
+  </div>
+
+  <!-- ── TROUBLESHOOTING ── -->
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+      <tr>
+        <td>Node grid is blank</td>
+        <td><code>health-latest.json</code> missing or stale</td>
+        <td>Run <code>python pipeline\check_runner_health.py</code></td>
+      </tr>
+      <tr>
+        <td>Node shows "Reachable" not "Ready"</td>
+        <td>nexetra-media not deployed to that host</td>
+        <td>Run <code>python viewer\deploy.py --host &lt;name&gt;</code></td>
+      </tr>
+      <tr>
+        <td>"⚠ Reconnecting…" in header</td>
+        <td>SSE connection dropped</td>
+        <td>Browser auto-reconnects; check service logs if persistent</td>
+      </tr>
+      <tr>
+        <td>Event history empty</td>
+        <td><code>job_runs.jsonl</code> not synced to ubuntu-1 yet</td>
+        <td>Re-run a batch, or run deploy.py to push latest files</td>
+      </tr>
+      <tr>
+        <td>Batch fails at scriptgen</td>
+        <td>DGX Ollama unreachable</td>
+        <td>Check <code>http://10.0.0.7:11434</code> is accessible on lab network</td>
+      </tr>
+      <tr>
+        <td>Stage fails: REMOTE_ROOT_NOT_FOUND</td>
+        <td>Host not yet provisioned</td>
+        <td>Run <code>python viewer\deploy.py --host &lt;name&gt;</code></td>
+      </tr>
+      <tr>
+        <td>Service exits on startup</td>
+        <td>Python syntax error or missing dep</td>
+        <td>Run <code>journalctl --user -u nexetra-viewer -n 30</code> on ubuntu-1</td>
+      </tr>
+    </table>
+  </div>
+
+  <footer>
+    Nexetra Media Factory &nbsp;·&nbsp; Dashboard User Manual v1.0 &nbsp;·&nbsp; 2026-06-09<br/>
+    Service: <a href="http://10.0.0.200:7800">http://10.0.0.200:7800</a> &nbsp;·&nbsp;
+    API: <a href="http://10.0.0.200:7800/api/snapshot">/api/snapshot</a>
+  </footer>
+
+</div>
+</div>
+</body>
+</html>

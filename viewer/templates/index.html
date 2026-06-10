@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexetra Media — Compute Dashboard</title>
+  <style>
+    :root {
+      --bg:#0b0f1a; --surface:#131929; --surface2:#1a2338; --surface3:#202b42;
+      --border:#253250; --text:#c8d6f0; --muted:#6b7ea8; --accent:#3b82f6;
+      --green:#22c55e; --yellow:#eab308; --red:#ef4444; --purple:#a855f7; --cyan:#06b6d4;
+      --orange:#f97316;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;min-height:100vh}
+
+    /* ── header ── */
+    header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;
+           display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo svg{color:var(--accent)}
+    header h1{font-size:17px;font-weight:700;letter-spacing:-.3px}
+    header h1 span{color:var(--accent)}
+    .header-right{display:flex;gap:20px;align-items:center}
+    .live-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+    .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    #last-updated{font-size:12px;color:var(--muted)}
+
+    /* ── layout ── */
+    main{padding:24px;display:flex;flex-direction:column;gap:32px;max-width:1700px;margin:0 auto}
+    section h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+               color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+    section h2::before{content:'';display:block;width:3px;height:14px;background:var(--accent);border-radius:2px}
+
+    /* ── stats bar ── */
+    .stats-bar{display:flex;gap:12px;flex-wrap:wrap}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+               padding:12px 18px;display:flex;flex-direction:column;gap:2px;min-width:120px}
+    .stat-value{font-size:24px;font-weight:700}
+    .stat-label{font-size:11px;color:var(--muted)}
+    .v-green{color:var(--green)} .v-yellow{color:var(--yellow)} .v-blue{color:var(--accent)} .v-purple{color:var(--purple)}
+
+    /* ── node grid ── */
+    .node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+    .node-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+               padding:13px 15px;transition:border-color .2s,transform .15s;cursor:default}
+    .node-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+    .node-card.nc-ready  {border-left:3px solid var(--green)}
+    .node-card.nc-reach  {border-left:3px solid var(--yellow)}
+    .node-card.nc-offline{border-left:3px solid var(--red)}
+    .node-card.nc-leased {border-left:3px solid var(--purple);background:#1a1530}
+    .node-name{font-weight:700;font-size:13px;margin-bottom:2px}
+    .node-ip{font-size:11px;color:var(--muted);font-family:monospace;margin-bottom:9px}
+    .node-caps{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+    .cap{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600}
+    .cap-on {background:#16a34a20;color:#4ade80;border:1px solid #166534}
+    .cap-off{background:#1f293750;color:var(--muted);border:1px solid var(--border)}
+    .cap-pu {background:#7c3aed20;color:#c084fc;border:1px solid #5b21b6}
+    .node-footer{display:flex;align-items:center;gap:6px;font-size:11px}
+    .status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .sd-green{background:var(--green)} .sd-yellow{background:var(--yellow)}
+    .sd-red{background:var(--red)} .sd-purple{background:var(--purple);animation:pulse 2s infinite}
+    .leased-tag{font-size:10px;color:var(--purple);margin-top:4px;
+                font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ollama-ver{font-size:10px;color:var(--muted);font-family:monospace;margin-top:4px}
+
+    /* ── job grid ── */
+    .job-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:16px}
+    .job-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+    .job-card.jc-running{border-color:var(--accent);background:#111e38}
+    .job-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+    .job-title{font-weight:700;font-size:15px}
+    .job-badge{font-size:10px;padding:3px 9px;border-radius:20px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+    .jb-running{background:#1d4ed820;color:#60a5fa;border:1px solid #1e40af;animation:pulse 2s infinite}
+    .jb-live-test{background:#7c3aed20;color:#c084fc;border:1px solid #5b21b6}
+    .jb-draft{background:#1f293750;color:var(--muted);border:1px solid var(--border)}
+    .jb-done{background:#16a34a20;color:#4ade80;border:1px solid #166534}
+    .job-goal{font-size:12px;color:var(--muted);margin:8px 0 14px;line-height:1.55}
+    /* pipeline row */
+    .pipeline{display:flex;align-items:flex-start;gap:0;margin-bottom:14px}
+    .pip-step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
+    .pip-step:not(:last-child)::after{content:'';position:absolute;left:calc(50% + 14px);right:calc(-50% + 14px);
+      top:13px;height:2px;background:var(--border);z-index:0}
+    .pip-step.ps-done::after{background:var(--green)}
+    .pip-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+             font-size:10px;font-weight:800;border:2px solid var(--border);position:relative;z-index:1;margin-bottom:4px}
+    .pd-done   {background:#16a34a20;border-color:var(--green);color:var(--green)}
+    .pd-running{background:#1d4ed820;border-color:var(--accent);color:var(--accent);animation:pulse 1.5s infinite}
+    .pd-pending{background:transparent;border-color:var(--border);color:var(--muted)}
+    .pip-label{font-size:9px;color:var(--muted);text-align:center}
+    /* progress bar */
+    .progress-wrap{margin-bottom:12px}
+    .prog-header{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px;color:var(--muted)}
+    .progress-bar{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden}
+    .progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .7s ease}
+    .job-meta{display:flex;gap:6px;flex-wrap:wrap}
+    .meta-tag{font-size:11px;padding:2px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--muted)}
+    .job-estimates{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+    .est-header{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-bottom:8px}
+    .est-tags{display:flex;gap:6px;flex-wrap:wrap}
+    .est-tag{font-size:10px;padding:3px 7px;border-radius:999px;background:#111827;border:1px solid var(--border);color:var(--text)}
+    .job-links{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    .asset-link{font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);text-decoration:none;color:var(--text);background:var(--surface2)}
+    .asset-link:hover{border-color:var(--accent);color:#fff}
+    .asset-folder{background:#1d4ed820;border-color:#1e40af;color:#93c5fd}
+    .asset-file{background:#16a34a20;border-color:#166534;color:#86efac}
+
+    /* ── history feed ── */
+    .history-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+    .history-header{display:grid;grid-template-columns:140px 150px 110px 110px 1fr;gap:0;
+                    padding:8px 16px;background:var(--surface2);font-size:11px;font-weight:700;
+                    text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+                    border-bottom:1px solid var(--border)}
+    .history-body{max-height:360px;overflow-y:auto}
+    .history-row{display:grid;grid-template-columns:140px 150px 110px 110px 1fr;gap:0;
+                 padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;align-items:center}
+    .history-row:last-child{border-bottom:none}
+    .history-row:hover{background:var(--surface2)}
+    .ev-start   {color:var(--accent)}
+    .ev-pass,.ev-done{color:var(--green)}
+    .ev-fail    {color:var(--red)}
+    .ev-release {color:var(--muted)}
+    .ev-default {color:var(--yellow)}
+    .history-empty{padding:40px;text-align:center;color:var(--muted);font-style:italic;font-size:13px}
+    .run-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+    .run-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+    .run-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}
+    .run-title{font-weight:700;font-size:14px}
+    .run-meta{font-size:11px;color:var(--muted);font-family:monospace;line-height:1.45}
+    .run-badge{font-size:10px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em}
+    .rb-done{background:#16a34a20;color:var(--green);border-color:#166534}
+    .rb-failed{background:#7f1d1d20;color:#f87171;border-color:#991b1b}
+    .rb-running{background:#1d4ed820;color:var(--accent);border-color:#1e40af}
+
+    /* ── footer ── */
+    footer{text-align:center;padding:20px;color:var(--muted);font-size:12px;border-top:1px solid var(--border);margin-top:12px}
+    footer a{color:var(--accent);text-decoration:none}
+
+    /* scrollbar */
+    ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-track{background:var(--surface2)}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+    </svg>
+    <h1>Nexetra <span>Media</span> · Compute Dashboard</h1>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>&nbsp;LIVE</div>
+    <span id="last-updated">Connecting…</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Stats bar -->
+  <section>
+    <h2>Pool Overview</h2>
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat-card"><div class="stat-value v-green" id="st-ready">—</div><div class="stat-label">Remote Ready</div></div>
+      <div class="stat-card"><div class="stat-value v-yellow" id="st-reach">—</div><div class="stat-label">Reachable</div></div>
+      <div class="stat-card"><div class="stat-value v-blue" id="st-ollama">—</div><div class="stat-label">Ollama Nodes</div></div>
+      <div class="stat-card"><div class="stat-value v-purple" id="st-leased">—</div><div class="stat-label">Active Leases</div></div>
+      <div class="stat-card"><div class="stat-value v-green" id="st-jobs">—</div><div class="stat-label">Jobs Defined</div></div>
+    </div>
+  </section>
+
+  <!-- Node health -->
+  <section>
+    <h2>Node Health</h2>
+    <div class="node-grid" id="node-grid"></div>
+  </section>
+
+  <!-- Jobs -->
+  <section>
+    <h2>Batch Jobs</h2>
+    <div class="job-grid" id="job-grid"></div>
+  </section>
+
+  <!-- History -->
+  <section>
+    <h2>Event History</h2>
+    <div class="history-wrap">
+      <div class="history-header">
+        <span>Time</span><span>Job</span><span>Stage</span><span>Event</span><span>Detail</span>
+      </div>
+      <div class="history-body" id="history-body">
+        <div class="history-empty" id="history-empty">No events yet — run a batch job to populate history.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Run Archive</h2>
+    <div class="run-grid" id="run-grid"></div>
+  </section>
+
+</main>
+
+<footer>
+  Nexetra Media Factory &nbsp;·&nbsp; Protected hosts excluded &nbsp;·&nbsp;
+  Refresh via <a href="/api/snapshot">/api/snapshot</a>
+</footer>
+
+<script>
+const STAGES = ['scriptgen','translate','tts','assembly','export'];
+const STAGE_ICON = {scriptgen:'S',translate:'T',tts:'♪',assembly:'A',export:'E'};
+
+function nodeClass(h, leased) {
+  if (leased) return 'nc-leased';
+  if (!h.reachable) return 'nc-offline';
+  if (h.remote_ready) return 'nc-ready';
+  return 'nc-reach';
+}
+function dotClass(h, leased) {
+  if (leased) return 'sd-purple';
+  if (!h.reachable) return 'sd-red';
+  if (h.remote_ready) return 'sd-green';
+  return 'sd-yellow';
+}
+function statusText(h, leased) {
+  if (leased) return '⚡ Running';
+  if (!h.reachable) return 'Offline';
+  if (h.remote_ready) return 'Ready';
+  return 'Reachable';
+}
+function cap(label, state, cls) {
+  return `<span class="cap ${cls||''} ${state?'cap-on':'cap-off'}">${label}</span>`;
+}
+
+function renderNodes(health, leases) {
+  const leasedMap = Object.fromEntries(leases.map(l => [l.name, l]));
+  const hosts = health.hosts || {};
+  const grid = document.getElementById('node-grid');
+  grid.innerHTML = Object.entries(hosts).map(([name, h]) => {
+    const lease = leasedMap[name];
+    const leased = !!lease;
+    const leasedJob = (lease?.job || '').replace(/.*[\\\/]/,'').replace('.json','');
+    return `<div class="node-card ${nodeClass(h, leased)}">
+      <div class="node-name">${name}</div>
+      <div class="node-ip">${h.ip}</div>
+      <div class="node-caps">
+        ${cap('Ollama', h.ollama)}
+        ${cap('vLLM', h.vllm)}
+        ${h.remote_ready ? cap('Remote✓', true, 'cap-on') : ''}
+      </div>
+      <div class="node-footer">
+        <div class="status-dot ${dotClass(h, leased)}"></div>
+        <span style="color:var(--muted)">${statusText(h, leased)}</span>
+      </div>
+      ${h.ollama_version ? `<div class="ollama-ver">${h.ollama_version}</div>` : ''}
+      ${leased ? `<div class="leased-tag">🔒 ${leasedJob}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // stats
+  const vals = Object.values(hosts);
+  document.getElementById('st-ready').textContent  = vals.filter(h=>h.remote_ready).length;
+  document.getElementById('st-reach').textContent  = vals.filter(h=>h.reachable && !h.remote_ready).length;
+  document.getElementById('st-ollama').textContent = vals.filter(h=>h.ollama).length;
+  document.getElementById('st-leased').textContent = leases.length;
+}
+
+function renderJobs(jobs, leases) {
+  const activeIds = new Set(leases.map(l =>
+    (l.job||'').replace(/.*[\\\/]/,'').replace('.json','')
+  ));
+  const grid = document.getElementById('job-grid');
+  document.getElementById('st-jobs').textContent = jobs.length;
+
+  grid.innerHTML = jobs.map(j => {
+    const running = activeIds.has(j.job_id);
+    const allDone = j.stages_done.length === STAGES.length;
+    let badgeClass = `jb-${j.status.replace('-','').replace(' ','')}`;
+    let badgeLabel = j.status;
+    if (running)   { badgeClass = 'jb-running'; badgeLabel = 'running'; }
+    else if (allDone){ badgeClass = 'jb-done';   badgeLabel = 'complete'; }
+
+    const pipeline = STAGES.map((stage, i) => {
+      const done    = j.stages_done.includes(stage);
+      const prevOk  = i === 0 || j.stages_done.includes(STAGES[i-1]);
+      const active  = running && !done && prevOk;
+      const dotCls  = done ? 'pd-done' : active ? 'pd-running' : 'pd-pending';
+      const stepCls = done ? 'ps-done' : '';
+      return `<div class="pip-step ${stepCls}">
+        <div class="pip-dot ${dotCls}">${STAGE_ICON[stage]||stage[0].toUpperCase()}</div>
+        <div class="pip-label">${stage}</div>
+      </div>`;
+    }).join('');
+
+    const langTags = j.languages.map(l=>`<span class="meta-tag">${l.toUpperCase()}</span>`).join('');
+    const fmtTags  = j.formats.map(f=>`<span class="meta-tag">${f}</span>`).join('');
+    const estTags  = (j.estimated_stage_minutes || []).map(x =>
+      `<span class="est-tag">${x.stage}: ${Number(x.minutes).toFixed(1)}m</span>`
+    ).join('');
+    const outputLinks = (j.output_items || []).map(item => {
+      const cls = item.kind === 'folder' ? 'asset-folder' : 'asset-file';
+      const label = item.kind === 'folder' ? `Open ${item.label}` : `Download ${item.label}`;
+      return `<a class="asset-link ${cls}" href="${item.href}" target="_blank" rel="noreferrer">${label}</a>`;
+    }).join('');
+    const outputs = outputLinks || '<span class="meta-tag">Outputs appear after the first stage completes</span>';
+
+    return `<div class="job-card ${running?'jc-running':''}">
+      <div class="job-header">
+        <div class="job-title">${j.title}</div>
+        <div class="job-badge ${badgeClass}">${badgeLabel}</div>
+      </div>
+      <div class="job-goal">${j.goal}</div>
+      <div class="pipeline">${pipeline}</div>
+      <div class="progress-wrap">
+        <div class="prog-header">
+          <span>Progress</span><span>${j.stages_done.length}/${STAGES.length} stages</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${j.progress}%"></div>
+        </div>
+      </div>
+      <div class="job-estimates">
+        <div class="est-header"><span>Estimated runtime</span><span>${Number(j.estimated_total_minutes).toFixed(1)} min total</span></div>
+        <div class="est-tags">${estTags}</div>
+      </div>
+      <div class="job-meta">${langTags}${fmtTags}<span class="meta-tag">${j.job_id}</span></div>
+      <div class="job-links">${outputs}</div>
+    </div>`;
+  }).join('');
+}
+
+function evClass(ev) {
+  if (!ev) return 'ev-default';
+  if (ev.includes('start'))   return 'ev-start';
+  if (ev.includes('pass') || ev.includes('done') || ev.includes('complete')) return 'ev-pass';
+  if (ev.includes('fail'))    return 'ev-fail';
+  if (ev.includes('release')) return 'ev-release';
+  return 'ev-default';
+}
+
+function renderHistory(history) {
+  const body  = document.getElementById('history-body');
+  const empty = document.getElementById('history-empty');
+  if (!history || history.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  body.innerHTML = history.map(e => {
+    const t     = e.ts ? new Date(e.ts*1000).toLocaleTimeString() : '';
+    const date  = e.ts ? new Date(e.ts*1000).toLocaleDateString() : '';
+    const job   = (e.job||'').replace(/.*[\\\/]/,'').replace('.json','');
+    const stage = e.stage || '—';
+    const ev    = e.event || '';
+    const detail= (e.detail || e.host || '').substring(0, 90);
+    return `<div class="history-row">
+      <span title="${date}">${t}</span>
+      <span>${job}</span>
+      <span>${stage}</span>
+      <span class="${evClass(ev)}">${ev}</span>
+      <span style="color:var(--muted);font-family:monospace;font-size:11px">${detail}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderRuns(runs) {
+  const grid = document.getElementById('run-grid');
+  if (!grid) return;
+  if (!runs || runs.length === 0) {
+    grid.innerHTML = '<div class="history-empty" style="grid-column:1/-1">No runs recorded yet.</div>';
+    return;
+  }
+  grid.innerHTML = runs.map(r => {
+    const started = r.started_at ? new Date(r.started_at*1000).toLocaleString() : '—';
+    const ended = r.ended_at ? new Date(r.ended_at*1000).toLocaleString() : '—';
+    const badge = r.status === 'done' ? 'rb-done' : r.status === 'failed' ? 'rb-failed' : 'rb-running';
+    const job = (r.job||'').replace(/.*[\\\/]/,'').replace('.json','');
+    return `<div class="run-card">
+      <div class="run-head">
+        <div class="run-title">${job}</div>
+        <div class="run-badge ${badge}">${r.status || 'running'}</div>
+      </div>
+      <div class="run-meta">
+        runner: ${r.runner || 'unknown'}<br/>
+        events: ${r.events || 0}<br/>
+        started: ${started}<br/>
+        ended: ${ended}<br/>
+        last: ${(r.last_event || '—')}${r.last_stage ? ' / ' + r.last_stage : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function applySnapshot(data) {
+  renderNodes(data.health || {}, data.leases || []);
+  renderJobs(data.jobs || [], data.leases || []);
+  renderHistory(data.history || []);
+  renderRuns(data.runs || []);
+  if (data.ts) {
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date(data.ts*1000).toLocaleTimeString();
+  }
+}
+
+// Initial render from server-side snapshot
+const _initial = {{ snapshot_json | safe }};
+applySnapshot(_initial);
+
+// SSE real-time updates
+const es = new EventSource('/events');
+es.onmessage = e => {
+  try { applySnapshot(JSON.parse(e.data)); }
+  catch(err) { console.warn('SSE parse error', err); }
+};
+es.onerror = () => {
+  document.getElementById('last-updated').textContent = '⚠ Reconnecting…';
+};
+</script>
+</body>
+</html>
