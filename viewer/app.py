@@ -237,28 +237,56 @@ def get_history(n: int = 120) -> list[dict]:
 
 def get_run_archive(n: int = 60) -> list[dict]:
     history = get_history(n=n)
-    runs: dict[tuple[str, str], dict] = {}
-    for event in reversed(history):
+    ordered = list(reversed(history))
+    open_runs: dict[tuple[str, str], dict] = {}
+    runs: list[dict] = []
+
+    for event in ordered:
         job = event.get("job", "")
-        runner = event.get("runner", "")
+        runner = event.get("runner", "") or "unknown"
         run_key = (job, runner)
-        record = runs.setdefault(run_key, {
-            "job": job,
-            "runner": runner or "unknown",
-            "status": "running",
-            "started_at": event.get("ts", 0),
-            "ended_at": 0,
-            "events": 0,
-            "last_event": event.get("event", ""),
-            "last_stage": event.get("stage", ""),
-        })
+        ev_name = event.get("event", "")
+
+        if ev_name == "batch_start":
+            record = {
+                "job": job,
+                "runner": runner,
+                "status": "running",
+                "started_at": event.get("ts", 0),
+                "ended_at": 0,
+                "events": 1,
+                "last_event": ev_name,
+                "last_stage": event.get("stage", ""),
+            }
+            runs.append(record)
+            open_runs[run_key] = record
+            continue
+
+        record = open_runs.get(run_key)
+        if record is None:
+            record = {
+                "job": job,
+                "runner": runner,
+                "status": "running",
+                "started_at": event.get("ts", 0),
+                "ended_at": 0,
+                "events": 0,
+                "last_event": "",
+                "last_stage": "",
+            }
+            runs.append(record)
+            open_runs[run_key] = record
+
         record["events"] += 1
-        if event.get("event") in {"batch_done", "batch_fail"}:
-            record["status"] = "done" if event.get("event") == "batch_done" else "failed"
-            record["ended_at"] = event.get("ts", 0)
-        record["last_event"] = event.get("event", "")
+        record["last_event"] = ev_name
         record["last_stage"] = event.get("stage", "")
-    return list(runs.values())
+
+        if ev_name in {"batch_done", "batch_fail"}:
+            record["status"] = "done" if ev_name == "batch_done" else "failed"
+            record["ended_at"] = event.get("ts", 0)
+            open_runs.pop(run_key, None)
+
+    return list(reversed(runs[-n:]))
 
 
 def build_snapshot() -> dict:

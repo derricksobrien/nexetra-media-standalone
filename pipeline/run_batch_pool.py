@@ -81,6 +81,18 @@ class Host:
     password: str
 
 
+def load_job_id(job_path: str) -> str:
+    path = REPO_ROOT / job_path
+    if not path.exists():
+        raise FileNotFoundError(f"Job file not found: {path}")
+    with path.open("r", encoding="utf-8") as f:
+        job = json.load(f)
+    job_id = str(job.get("job_id") or "").strip()
+    if not job_id:
+        raise ValueError(f"job_id missing in job file: {path}")
+    return job_id
+
+
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         return {}
@@ -175,6 +187,58 @@ def remote_run(host: Host, command: str, timeout: int = 300) -> tuple[int, str, 
             client.close()
         except Exception:
             pass
+
+
+def _connect_ssh(host: Host) -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        host.ip,
+        username=host.user,
+        password=host.password,
+        timeout=10,
+        banner_timeout=10,
+        auth_timeout=10,
+        look_for_keys=False,
+        allow_agent=False,
+    )
+    return client
+
+
+def _sftp_download_tree(sftp: paramiko.SFTPClient, remote_dir: str, local_dir: Path) -> None:
+    local_dir.mkdir(parents=True, exist_ok=True)
+    for entry in sftp.listdir_attr(remote_dir):
+        remote_path = f"{remote_dir.rstrip('/')}/{entry.filename}"
+        local_path = local_dir / entry.filename
+        if entry.st_mode & 0o40000:
+            _sftp_download_tree(sftp, remote_path, local_path)
+        else:
+            sftp.get(remote_path, str(local_path))
+
+
+def sync_remote_artifacts(host: Host, remote_root: str, job_id: str) -> tuple[bool, str]:
+    remote_job_dir = f"{remote_root.rstrip('/')}/output/{job_id}"
+    local_job_dir = REPO_ROOT / "output" / job_id
+    client = None
+    sftp = None
+    try:
+        client = _connect_ssh(host)
+        sftp = client.open_sftp()
+        _sftp_download_tree(sftp, remote_job_dir, local_job_dir)
+        return True, f"synced {remote_job_dir} -> {local_job_dir}"
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        if sftp is not None:
+            try:
+                sftp.close()
+            except Exception:
+                pass
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 def load_leases() -> dict:
@@ -422,6 +486,7 @@ def main() -> None:
         allow_patterns = [r"^gx10", r"^Lab-", r"^ubuntu-"]
 
     candidates = load_hosts(deny_hosts=deny, allow_patterns=allow_patterns)
+    job_id = load_job_id(args.job)
     remote_roots = pool_conf.get("remote_root_candidates", [])
     if not remote_roots:
         remote_roots = [
@@ -500,6 +565,24 @@ def main() -> None:
                 print(f"Stage failed: {stage}")
                 success = False
                 break
+
+        if success:
+            if anchor_host and health.get(anchor_host.name, {}).get("remote_root"):
+                _log_event(args.job, "stage_start", stage="artifact_sync", host=anchor_host.name)
+                ok, detail = sync_remote_artifacts(
+                    anchor_host,
+                    remote_root=health[anchor_host.name]["remote_root"],
+                    job_id=job_id,
+                )
+                if ok:
+                    _log_event(args.job, "stage_pass", stage="artifact_sync", host=anchor_host.name, detail=detail)
+                    print(f"\n=== Stage: artifact_sync (remote: {anchor_host.name}) ===")
+                    print(detail)
+                else:
+                    _log_event(args.job, "stage_fail", stage="artifact_sync", host=anchor_host.name, detail=detail)
+                    print(f"\n=== Stage: artifact_sync (remote: {anchor_host.name}) ===")
+                    print(f"Artifact sync failed: {detail}")
+                    success = False
 
         if success:
             _log_event(args.job, "batch_done", detail="all stages passed")
