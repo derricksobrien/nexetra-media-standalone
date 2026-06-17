@@ -24,8 +24,18 @@ import paramiko
 
 ROOT = Path(__file__).resolve().parent.parent          # nexetra-media/
 WORKSPACE_ROOT = ROOT.parent
-SECRETS_FILE = WORKSPACE_ROOT / "secrets.local.md"
-WORKSTATIONS_CSV = WORKSPACE_ROOT / "workstations.csv"
+
+
+def _resolve_path(filename: str) -> Path:
+    """Prefer repo-local config files; fall back to legacy parent layout."""
+    local = ROOT / filename
+    if local.exists():
+        return local
+    return WORKSPACE_ROOT / filename
+
+
+SECRETS_FILE = _resolve_path("secrets.local.md")
+WORKSTATIONS_CSV = _resolve_path("workstations.csv")
 
 # ── default deployment target ──────────────────────────────────────────────
 DEFAULT_HOST = "ubuntu-1"

@@ -1,0 +1,17 @@
+{
+  "job_id": "stress-thunderbolt-c",
+  "title": "Nexetra Regional Variant Stress C",
+  "duration_seconds": 70,
+  "languages": ["en", "sv", "no", "da", "fi", "yue"],
+  "formats": ["16:9", "9:16", "1:1"],
+  "style": "talking-head",
+  "cta": "See localized campaigns in one day",
+  "stage_estimates_minutes": {
+    "scriptgen": 0.7,
+    "translate": 1.5,
+    "tts": 1.3,
+    "assembly": 1.6,
+    "export": 1.6
+  },
+  "status": "stress-suite"
+}

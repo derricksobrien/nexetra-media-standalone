@@ -93,6 +93,28 @@ Detailed timestamped plans:
 
 ## Distributed Compute Pool Runner
 
+## Standalone Clone Setup
+
+This repository is portable and can run independently of the parent workspace.
+
+After cloning:
+
+1. Create local credential files from templates:
+   - `copy workstations.example.csv workstations.csv`
+   - `copy secrets.local.example.md secrets.local.md`
+2. Fill in real host inventory and passwords in the two local files.
+3. Create your environment and install dependencies:
+   - `python -m venv .venv`
+   - `.venv\\Scripts\\activate`
+   - `pip install -r requirements.txt`
+   - `pip install -r viewer/requirements.txt`
+4. Run a health probe:
+   - `python pipeline/run_batch_pool.py --job jobs/what-is-nexetra-live-es.json --health-only`
+
+Notes:
+- `workstations.csv` and `secrets.local.md` are intentionally gitignored.
+- Runtime scripts prefer repo-local files and still support the older parent-folder layout.
+
 For batch operations, use the pool-aware runner:
 
 - Command:
@@ -113,6 +135,9 @@ Runner health checks:
    - `python pipeline/check_runner_health.py`
 - Inline check before a batch:
    - `python pipeline/run_batch_pool.py --job jobs/what-is-nexetra-live-es.json --health-only`
+
+Continuous Node Health refresh (for live dashboard node cards):
+- `python pipeline/health_refresh_daemon.py --interval-seconds 60`
 
 Lab mini admin bootstrap (one-time):
 - Use `../bootstrap-lab-minis-ollama.ps1` to run the temporary grant -> install -> revoke flow.

@@ -1,0 +1,17 @@
+{
+  "job_id": "stress-thunderbolt-a",
+  "title": "Nexetra Networked Lab Stress A",
+  "duration_seconds": 75,
+  "languages": ["en", "es", "fr", "de", "pt"],
+  "formats": ["16:9", "9:16", "1:1"],
+  "style": "slides",
+  "cta": "Book a Nexetra AI lab session",
+  "stage_estimates_minutes": {
+    "scriptgen": 0.8,
+    "translate": 1.2,
+    "tts": 1.0,
+    "assembly": 1.4,
+    "export": 1.4
+  },
+  "status": "stress-suite"
+}

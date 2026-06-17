@@ -5,6 +5,9 @@
 .env
 .env.local
 .env.*.local
+secrets.local.md
+*.local.md
+workstations.csv
 *.pem
 *.key
 *.pub
@@ -140,6 +143,9 @@ htmlcov/
 
 # === Sensitive per-machine configs ===
 pipeline/config.local.json
+pipeline/config.local.yaml
+config.local.yaml
+config.local.yml
 pipeline/.env.local
 jobs/secrets.json
 rtc-results.csv  # RTT test results (may contain IP/perf data)
@@ -153,3 +159,5 @@ rtc-results.csv  # RTT test results (may contain IP/perf data)
 !docs/
 !templates/
 !.gitmodules
+!workstations.example.csv
+!secrets.local.example.md

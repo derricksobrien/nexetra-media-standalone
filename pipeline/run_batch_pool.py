@@ -40,10 +40,20 @@ except ModuleNotFoundError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKSPACE_ROOT = REPO_ROOT.parent
 CONFIG_PATH = REPO_ROOT / "config.yaml"
-WORKSTATIONS_CSV = WORKSPACE_ROOT / "workstations.csv"
-SECRETS_FILE = WORKSPACE_ROOT / "secrets.local.md"
 LEASES_FILE = REPO_ROOT / "output" / "compute_pool" / "leases.json"
 RUNS_LOG = REPO_ROOT / "output" / "job_runs.jsonl"
+
+
+def _resolve_path(filename: str) -> Path:
+    """Prefer repo-local config files; fall back to legacy parent layout."""
+    local = REPO_ROOT / filename
+    if local.exists():
+        return local
+    return WORKSPACE_ROOT / filename
+
+
+WORKSTATIONS_CSV = _resolve_path("workstations.csv")
+SECRETS_FILE = _resolve_path("secrets.local.md")
 
 
 def _log_event(
