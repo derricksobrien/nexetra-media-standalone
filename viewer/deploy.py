@@ -22,6 +22,11 @@ from pathlib import Path
 
 import paramiko
 
+try:
+    from viewer.archive_utils import should_exclude_archive_path
+except ModuleNotFoundError:
+    from archive_utils import should_exclude_archive_path
+
 ROOT = Path(__file__).resolve().parent.parent          # nexetra-media/
 WORKSPACE_ROOT = ROOT.parent
 
@@ -73,12 +78,12 @@ def load_host(name: str):
 
 
 def make_archive() -> bytes:
-    """Package nexetra-media (excluding .venv, output, .git, __pycache__)."""
+    """Package deployable source without local credentials or generated data."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         for p in ROOT.rglob("*"):
             rel = p.relative_to(ROOT)
-            if any(part in {".git", ".venv", "__pycache__", "output"} for part in rel.parts):
+            if should_exclude_archive_path(rel):
                 continue
             if p.is_file():
                 tf.add(p, arcname=str(rel))

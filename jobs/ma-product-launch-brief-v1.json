@@ -1,0 +1,36 @@
+{
+  "job_id": "ma-product-launch-brief-v1",
+  "title": "Multi-Agent Product Launch Brief",
+  "duration_seconds": 180,
+  "languages": ["en", "es"],
+  "formats": ["16:9", "1:1"],
+  "style": "multi-agent-brief",
+  "cta": "Prepare launch-ready campaign assets",
+  "stage_estimates_minutes": {
+    "scriptgen": 1.2,
+    "translate": 0.9,
+    "tts": 0.6,
+    "assembly": 1.2,
+    "export": 1.0
+  },
+  "status": "draft",
+  "scenario": {
+    "type": "multi_agent_solution",
+    "agents": ["planner", "researcher", "writer", "critic", "verifier"],
+    "coordination_mode": "sequential-review"
+  },
+  "execution_policy": {
+    "priority": "high",
+    "max_nodes": 4,
+    "retry_budget": 2
+  },
+  "model_policy": {
+    "scriptgen_primary": "qwen2.5:72b-instruct-q4",
+    "translate_primary": "llama3.1:8b-instruct",
+    "fallback": "qwen2.5:14b-instruct"
+  },
+  "success_criteria": {
+    "required_artifacts": ["brief.md", "narrative.json", "handoff.md"],
+    "quality_gate": "critic_pass"
+  }
+}

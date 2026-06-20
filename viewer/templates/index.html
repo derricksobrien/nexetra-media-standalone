@@ -65,6 +65,51 @@
                 font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .ollama-ver{font-size:10px;color:var(--muted);font-family:monospace;margin-top:4px}
 
+    /* ── remediation cards ── */
+    .fix-note{font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.5;max-width:1100px}
+    .fix-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+    .fix-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+    .fix-card.fx-linux{border-left:3px solid var(--green)}
+    .fix-card.fx-mac{border-left:3px solid var(--yellow)}
+    .fix-card.fx-offline{border-left:3px solid var(--red)}
+    .fix-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px}
+    .fix-actions{display:flex;gap:6px;align-items:center}
+    .fix-title{font-weight:700;font-size:14px}
+    .fix-chip{font-size:10px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted);background:var(--surface2);text-transform:uppercase;letter-spacing:.04em}
+    .fix-summary{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+    .fix-step{margin-top:10px}
+    .fix-step-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px}
+    .fix-step-label{font-size:11px;color:var(--text);margin-bottom:4px}
+    .fix-step pre{margin:0;background:#0d1320;border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow:auto;color:#dbeafe;font-family:ui-monospace, SFMono-Regular, Consolas, monospace;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+    .copy-btn{font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer}
+    .copy-btn:hover{border-color:var(--accent);color:#fff}
+    .copy-btn.copied{border-color:#166534;background:#16a34a20;color:#86efac}
+    .run-btn{font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #1e40af;background:#1d4ed820;color:#93c5fd;cursor:pointer}
+    .run-btn:hover{border-color:#60a5fa;color:#dbeafe}
+    .run-btn.running{border-color:#166534;background:#16a34a20;color:#86efac}
+    .fix-run-status{margin-top:8px;font-size:11px;color:var(--muted);font-family:monospace}
+    .fix-meta{margin-top:10px;font-size:11px;color:var(--muted);font-family:monospace}
+    .viewer-meta{font-size:11px;color:var(--muted);margin-top:6px}
+
+    /* ── thunderbolt pane ── */
+    .tb-note{font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.5;max-width:1200px}
+    .tb-meta{font-size:11px;color:var(--muted);margin:0 0 10px;font-family:monospace}
+    .tb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+    .tb-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+    .tb-card.tb-good{border-left:3px solid var(--green)}
+    .tb-card.tb-partial{border-left:3px solid var(--yellow)}
+    .tb-card.tb-down{border-left:3px solid var(--red)}
+    .tb-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px}
+    .tb-title{font-weight:700;font-size:14px}
+    .tb-summary{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45}
+    .tb-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+    .tb-chip{font-size:10px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text);text-transform:uppercase;letter-spacing:.04em}
+    .tb-chip.good{border-color:#166534;color:#86efac;background:#16a34a20}
+    .tb-chip.partial{border-color:#854d0e;color:#fde68a;background:#eab30820}
+    .tb-chip.down{border-color:#991b1b;color:#fca5a5;background:#7f1d1d20}
+    .tb-conn{margin:8px 0 10px;font-size:11px;color:var(--muted);font-family:monospace}
+    .tb-links{margin:8px 0 10px;font-size:11px;color:var(--muted)}
+
     /* ── job grid ── */
     .job-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:16px}
     .job-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
@@ -178,6 +223,26 @@
     <div class="node-grid" id="node-grid"></div>
   </section>
 
+  <section>
+    <h2>Remediation</h2>
+    <div class="fix-note">
+      Yellow nodes are reachable but not remote ready. Linux nodes can be repaired from the dashboard with the existing deploy path.
+      macOS Lab stations are reachable, but the current viewer deploy script is Linux/systemd-only, so they need a separate macOS bootstrap if you want them to become remote ready.
+    </div>
+    <div class="viewer-meta" id="viewer-meta"></div>
+    <div class="fix-grid" id="fix-grid"></div>
+  </section>
+
+  <section>
+    <h2>Thunderbolt Fabric (Mac Minis)</h2>
+    <div class="tb-note">
+      This pane tracks Thunderbolt bridge status and MLX runtime readiness for each Lab mini. Use the commands in each card to finish probing and install prerequisites.
+      Connection indicators are derived from latest probe outputs.
+    </div>
+    <div class="tb-meta" id="tb-meta">Waiting for probe data…</div>
+    <div class="tb-grid" id="tb-grid"></div>
+  </section>
+
   <!-- Jobs -->
   <section>
     <h2>Batch Jobs</h2>
@@ -235,6 +300,48 @@ function cap(label, state, cls) {
   return `<span class="cap ${cls||''} ${state?'cap-on':'cap-off'}">${label}</span>`;
 }
 
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function detectClientPlatform() {
+  const p = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || '').toLowerCase();
+  if (p.includes('mac')) return 'macOS';
+  if (p.includes('win')) return 'Windows';
+  if (p.includes('linux')) return 'Linux';
+  return 'Unknown';
+}
+
+async function copyCommand(btn) {
+  const encoded = btn.getAttribute('data-cmd') || '';
+  const command = decodeURIComponent(encoded);
+  try {
+    await navigator.clipboard.writeText(command);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = command;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  const old = btn.textContent;
+  btn.textContent = 'Copied';
+  btn.classList.add('copied');
+  setTimeout(() => {
+    btn.textContent = old;
+    btn.classList.remove('copied');
+  }, 1200);
+}
+
 function renderNodes(health, leases) {
   const leasedMap = Object.fromEntries(leases.map(l => [l.name, l]));
   const hosts = health.hosts || {};
@@ -257,6 +364,7 @@ function renderNodes(health, leases) {
       </div>
       ${h.ollama_version ? `<div class="ollama-ver">${h.ollama_version}</div>` : ''}
       ${leased ? `<div class="leased-tag">🔒 ${leasedJob}</div>` : ''}
+      ${!h.remote_ready ? `<div class="leased-tag" style="color:var(--yellow)"><a href="#remediation-${name}" style="color:inherit;text-decoration:none">Repair plan below</a></div>` : ''}
     </div>`;
   }).join('');
 
@@ -266,6 +374,144 @@ function renderNodes(health, leases) {
   document.getElementById('st-reach').textContent  = vals.filter(h=>h.reachable && !h.remote_ready).length;
   document.getElementById('st-ollama').textContent = vals.filter(h=>h.ollama).length;
   document.getElementById('st-leased').textContent = leases.length;
+}
+
+function renderRemediations(remediations) {
+  const grid = document.getElementById('fix-grid');
+  if (!grid) return;
+  const viewerMeta = document.getElementById('viewer-meta');
+  if (viewerMeta) {
+    viewerMeta.textContent = `This browser platform: ${detectClientPlatform()}. Commands below are generated per target node OS.`;
+  }
+  if (!remediations || remediations.length === 0) {
+    grid.innerHTML = '<div class="history-empty" style="grid-column:1/-1">No remediation actions are needed right now.</div>';
+    return;
+  }
+
+  grid.innerHTML = remediations.map(item => {
+    const kind = (item.os || '').toLowerCase() === 'linux' ? 'fx-linux' : (item.os || '').toLowerCase() === 'darwin' ? 'fx-mac' : 'fx-offline';
+    const chip = (item.os || 'unknown').toUpperCase();
+    const status = item.remote_ready ? 'Ready' : item.reachable ? 'Reachable' : 'Offline';
+    const runState = item.run_state || { status: 'idle' };
+    const runStatus = (runState.status || 'idle').toUpperCase();
+    const runDetail = runState.error || runState.stderr || runState.stdout || '';
+    const canRun = !!item.run_endpoint && item.reachable;
+    const steps = (item.commands || []).map((step, index) => `
+      <div class="fix-step">
+        <div class="fix-step-head">
+          <div class="fix-step-label">Step ${index + 1} · ${escapeHtml(step.label)}</div>
+          <button class="copy-btn" type="button" data-cmd="${escapeHtml(encodeURIComponent(step.command))}">Copy command</button>
+        </div>
+        <pre>${escapeHtml(step.command)}</pre>
+      </div>
+    `).join('');
+
+    return `<div class="fix-card ${kind}" id="remediation-${escapeHtml(item.name)}">
+      <div class="fix-head">
+        <div>
+          <div class="fix-title">${escapeHtml(item.name)}</div>
+          <div class="fix-summary">${escapeHtml(item.summary)}</div>
+        </div>
+        <div class="fix-actions">
+          ${canRun ? `<button class="run-btn ${runState.status === 'running' ? 'running' : ''}" type="button" data-host="${escapeHtml(item.name)}" data-endpoint="${escapeHtml(item.run_endpoint)}">${runState.status === 'running' ? 'Running…' : 'Run fix'}</button>` : ''}
+          <div class="fix-chip">${escapeHtml(chip)} · ${escapeHtml(status)}</div>
+        </div>
+      </div>
+      ${steps}
+      <div class="fix-run-status">Last remediation: ${escapeHtml(runStatus)}${runDetail ? ` · ${escapeHtml(String(runDetail).slice(0, 180))}` : ''}</div>
+      <div class="fix-meta">IP: ${escapeHtml(item.ip)}${item.user ? ` · user: ${escapeHtml(item.user)}` : ''}${item.remote_root ? ` · root: ${escapeHtml(item.remote_root)}` : ''}${item.remote_python ? ' · venv ready' : ' · venv missing'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderThunderbolt(tb) {
+  const grid = document.getElementById('tb-grid');
+  const meta = document.getElementById('tb-meta');
+  if (!grid || !meta) return;
+
+  const hosts = tb?.hosts || [];
+  const links = tb?.links || [];
+  const summary = tb?.summary || { mac_hosts: 0, inference_ready: 0, good_links: 0 };
+  const source = tb?.source || 'none';
+
+  meta.textContent = `mac_hosts=${summary.mac_hosts} · inference_ready=${summary.inference_ready} · good_links=${summary.good_links} · source=${source}`;
+
+  if (!hosts.length) {
+    grid.innerHTML = '<div class="history-empty" style="grid-column:1/-1">No Thunderbolt probe data found yet. Run the probe script to populate this pane.</div>';
+    return;
+  }
+
+  const linksText = links.length
+    ? links.map(l => `${escapeHtml(l.a)} ↔ ${escapeHtml(l.b)}`).join(' · ')
+    : 'No explicit pair map in current probe output yet.';
+
+  grid.innerHTML = hosts.map(item => {
+    const linkClass = item.tb_link === 'good' ? 'tb-good' : item.tb_link === 'partial' ? 'tb-partial' : 'tb-down';
+    const linkChip = item.tb_link === 'good' ? 'good' : item.tb_link === 'partial' ? 'partial' : 'down';
+    const connected = (item.connected_to && item.connected_to.length)
+      ? item.connected_to.join(', ')
+      : 'Unresolved (run probe with peer checks)';
+
+    const steps = (item.commands || []).map((step, index) => `
+      <div class="fix-step">
+        <div class="fix-step-head">
+          <div class="fix-step-label">Step ${index + 1} · ${escapeHtml(step.label)}</div>
+          <button class="copy-btn" type="button" data-cmd="${escapeHtml(encodeURIComponent(step.command))}">Copy command</button>
+        </div>
+        <pre>${escapeHtml(step.command)}</pre>
+      </div>
+    `).join('');
+
+    return `<div class="tb-card ${linkClass}">
+      <div class="tb-head">
+        <div>
+          <div class="tb-title">${escapeHtml(item.name)}</div>
+          <div class="tb-summary">${escapeHtml(item.summary)}</div>
+        </div>
+        <div class="fix-chip">${escapeHtml(item.status || 'PENDING')}</div>
+      </div>
+      <div class="tb-chips">
+        <span class="tb-chip ${linkChip}">TB ${escapeHtml(item.tb_link || 'unknown')}</span>
+        <span class="tb-chip">Bridge ${escapeHtml(item.tb_bridge || 'unknown')}</span>
+        <span class="tb-chip">TB IP ${escapeHtml(item.tb_ip || 'unknown')}</span>
+        <span class="tb-chip ${item.inference_ready ? 'good' : 'down'}">Inference ${item.inference_ready ? 'Ready' : 'NotReady'}</span>
+        ${item.wifi_was_on === 1 ? '<span class="tb-chip down" title="Wi-Fi was ON during probe — turned off">WiFi Disabled✓</span>' : item.wifi_was_on === 0 ? '<span class="tb-chip good" title="Wi-Fi was already off">WiFi Off</span>' : ''}
+      </div>
+      <div class="tb-conn">connected_to: ${escapeHtml(connected)}</div>
+      <div class="tb-meta">mlx=${escapeHtml(item.mlx || 'unknown')} · mlx_lm=${escapeHtml(item.mlx_lm || 'unknown')} · mgmt_ip=${escapeHtml(item.ip || '')} · user=${escapeHtml(item.user || '')}</div>
+      ${steps}
+      <div class="tb-links">Fabric map: ${linksText}</div>
+    </div>`;
+  }).join('');
+}
+
+async function runFix(btn) {
+  const endpoint = btn.getAttribute('data-endpoint');
+  if (!endpoint) return;
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  try {
+    const res = await fetch(endpoint, { method: 'POST' });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    btn.textContent = 'Running…';
+    btn.classList.add('running');
+    setTimeout(async () => {
+      try {
+        const snap = await fetch('/api/snapshot', { cache: 'no-store' });
+        if (snap.ok) {
+          applySnapshot(await snap.json());
+        }
+      } catch {
+        // keep current UI if refresh fails
+      }
+    }, 1200);
+  } catch (err) {
+    btn.textContent = 'Run failed';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderJobs(jobs, leases) {
@@ -396,6 +642,8 @@ function renderRuns(runs) {
 
 function applySnapshot(data) {
   renderNodes(data.health || {}, data.leases || []);
+  renderRemediations(data.remediations || []);
+  renderThunderbolt(data.thunderbolt || {});
   renderJobs(data.jobs || [], data.leases || []);
   renderHistory(data.history || []);
   renderRuns(data.runs || []);
@@ -404,6 +652,18 @@ function applySnapshot(data) {
       'Updated ' + new Date(data.ts*1000).toLocaleTimeString();
   }
 }
+
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('.copy-btn');
+  if (btn) {
+    copyCommand(btn);
+    return;
+  }
+  const runBtn = event.target.closest('.run-btn');
+  if (runBtn) {
+    runFix(runBtn);
+  }
+});
 
 // Initial render from server-side snapshot
 const _initial = {{ snapshot_json | safe }};

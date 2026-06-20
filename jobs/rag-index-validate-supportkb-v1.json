@@ -1,0 +1,37 @@
+{
+  "job_id": "rag-index-validate-supportkb-v1",
+  "title": "RAG Support KB Index and Validation",
+  "duration_seconds": 120,
+  "languages": ["en", "es"],
+  "formats": ["16:9"],
+  "style": "rag-validation",
+  "cta": "Ship refreshed, validated retrieval index",
+  "stage_estimates_minutes": {
+    "scriptgen": 0.6,
+    "translate": 0.5,
+    "tts": 0.1,
+    "assembly": 0.5,
+    "export": 0.3
+  },
+  "status": "indexing",
+  "scenario": {
+    "type": "rag_index_and_validation",
+    "corpus_id": "support-kb-2026q2",
+    "chunk_strategy": "semantic-800-120",
+    "top_k": 5
+  },
+  "execution_policy": {
+    "priority": "normal",
+    "max_nodes": 5,
+    "retry_budget": 2
+  },
+  "model_policy": {
+    "embed_model_primary": "nomic-embed-text",
+    "retrieval_eval_primary": "qwen2.5:14b-instruct",
+    "fallback": "llama3.1:8b-instruct"
+  },
+  "success_criteria": {
+    "required_artifacts": ["index-manifest.json", "retrieval-eval.json", "coverage-report.md"],
+    "minimum_recall_at_5": 0.82
+  }
+}

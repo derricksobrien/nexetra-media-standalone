@@ -4,9 +4,13 @@
 # === Environment & Credentials (NEVER commit) ===
 .env
 .env.local
+.env.*
 .env.*.local
 secrets.local.md
 *.local.md
+*.secret
+*.secrets
+*.credentials.*
 workstations.csv
 *.pem
 *.key
@@ -18,14 +22,19 @@ workstations.csv
 secrets/
 credentials.json
 config.json
+.npmrc
+.pypirc
 .huggingface/token
 ollama-session.log
 
 # === Python & Virtual Environments ===
 venv/
+venv*/
 env/
+env*/
 ENV/
 .venv/
+.venv*/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -34,6 +43,9 @@ dist/
 build/
 *.egg
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.nox/
 .tox/
 pip-log.txt
 pip-delete-this-directory.txt
@@ -51,6 +63,8 @@ output/
 output/*/
 dist/
 artifacts/
+downloads/
+cache/
 
 # Temporary working files
 tmp/
@@ -63,7 +77,10 @@ models/
 checkpoints/
 *.ckpt
 *.pth
+*.pt
 *.bin
+*.gguf
+*.onnx
 *.safetensors
 huggingface/
 ollama/data/
@@ -86,6 +103,14 @@ xtts-models/
 *.raw
 *.pcm
 *.wav.tmp
+*.wav
+*.mp3
+*.flac
+*.aac
+*.mp4
+*.mov
+*.mkv
+*.webm
 temp-frames/
 frame-*.png
 frame-*.jpg
@@ -155,6 +180,7 @@ rtc-results.csv  # RTT test results (may contain IP/perf data)
 .gitignore.bak
 
 # === Allow these (exceptions) ===
+!.env.example
 !.gitkeep
 !docs/
 !templates/

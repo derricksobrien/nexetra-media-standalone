@@ -1,0 +1,37 @@
+{
+  "job_id": "harness-regression-weekly-v1",
+  "title": "Agent Harness Weekly Regression",
+  "duration_seconds": 60,
+  "languages": ["en"],
+  "formats": ["16:9"],
+  "style": "harness-report",
+  "cta": "Generate pass-fail reliability summary",
+  "stage_estimates_minutes": {
+    "scriptgen": 0.8,
+    "translate": 0.1,
+    "tts": 0.1,
+    "assembly": 0.6,
+    "export": 0.4
+  },
+  "status": "regression",
+  "scenario": {
+    "type": "agent_harness_regression",
+    "suite_name": "core-agent-tools",
+    "cases": 120,
+    "seed": 42
+  },
+  "execution_policy": {
+    "priority": "high",
+    "max_nodes": 3,
+    "retry_budget": 0
+  },
+  "model_policy": {
+    "judge_model_primary": "qwen2.5:32b-instruct",
+    "candidate_model_primary": "qwen2.5:14b-instruct",
+    "fallback": "llama3.1:8b-instruct"
+  },
+  "success_criteria": {
+    "required_artifacts": ["regression-results.json", "failure-bucket.md", "summary.md"],
+    "max_failure_rate": 0.05
+  }
+}

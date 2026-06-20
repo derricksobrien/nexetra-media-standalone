@@ -19,10 +19,16 @@ URL:  http://localhost:7800
 from __future__ import annotations
 
 import asyncio
+import csv
 import html
+import io
 import json
 import os
+import re
+import tarfile
+import threading
 import time
+import uuid
 from pathlib import Path
 from typing import AsyncGenerator
 from urllib.parse import quote
@@ -30,15 +36,28 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
+try:
+    from viewer.archive_utils import should_exclude_archive_path
+except ModuleNotFoundError:
+    from archive_utils import should_exclude_archive_path
+
+try:
+    import paramiko
+except Exception:  # pragma: no cover - handled by endpoint checks
+    paramiko = None
+
 ROOT = Path(__file__).resolve().parent.parent  # nexetra-media/
+WORKSPACE_ROOT = ROOT.parent
 HEALTH_FILE  = ROOT / "output" / "compute_pool" / "health-latest.json"
 LEASES_FILE  = ROOT / "output" / "compute_pool" / "leases.json"
 JOBS_DIR     = ROOT / "jobs"
 OUTPUT_DIR   = ROOT / "output"
 RUNS_LOG     = ROOT / "output" / "job_runs.jsonl"
+THUNDERBOLT_LOGS = WORKSPACE_ROOT / "logs"
+THUNDERBOLT_TELEMETRY = ROOT / "output" / "telemetry"
 
 # Hosts that must never appear in the dashboard
-PROTECTED_HOSTS = {"linux-1", "linux-2", "das-Mac-mini.local", "sql-server"}
+PROTECTED_HOSTS = {"linux-1", "linux-2", "das-Mac-mini.local", "sql-server", "ubuntu-3"}
 
 STAGES = ["scriptgen", "translate", "tts", "assembly", "export"]
 
@@ -67,6 +86,22 @@ app = FastAPI(title="Nexetra Media Dashboard", docs_url=None, redoc_url=None)
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
 
 
+def _resolve_path(filename: str) -> Path:
+    local = ROOT / filename
+    if local.exists():
+        return local
+    return WORKSPACE_ROOT / filename
+
+
+WORKSTATIONS_CSV = _resolve_path("workstations.csv")
+SECRETS_FILE = _resolve_path("secrets.local.md")
+MAC_BOOTSTRAP_SCRIPT = ROOT / "viewer" / "remote" / "bootstrap_mac.sh"
+LINUX_BOOTSTRAP_SCRIPT = ROOT / "viewer" / "remote" / "bootstrap_linux.sh"
+
+_REMEDIATION_RUNS: dict[str, dict] = {}
+_REMEDIATION_LOCK = threading.Lock()
+
+
 def _render_html(snapshot: dict) -> str:
     html = _TEMPLATE_PATH.read_text(encoding="utf-8")
     safe_json = json.dumps(snapshot).replace("</script>", "<\\/script>")
@@ -93,10 +128,447 @@ def get_health_data() -> dict:
     }
 
 
+def _load_host_users() -> dict[str, str]:
+    if not WORKSTATIONS_CSV.exists():
+        return {}
+    users: dict[str, str] = {}
+    with WORKSTATIONS_CSV.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            name = (row.get("name") or "").strip()
+            user = (row.get("un") or "").strip()
+            if name and user:
+                users[name] = user
+    return users
+
+
+def _load_workstations() -> list[dict[str, str]]:
+    if not WORKSTATIONS_CSV.exists():
+        return []
+    out: list[dict[str, str]] = []
+    with WORKSTATIONS_CSV.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            out.append({
+                "name": (row.get("name") or "").strip(),
+                "ip": (row.get("ip") or "").strip(),
+                "user": (row.get("un") or "").strip(),
+            })
+    return out
+
+
+def _latest_thunderbolt_probe_csv() -> Path | None:
+    candidates: list[Path] = []
+    for base in (THUNDERBOLT_LOGS, THUNDERBOLT_TELEMETRY):
+        if not base.exists():
+            continue
+        candidates.extend(base.glob("thunderbolt-mlx-probe-*.csv"))
+
+    if not candidates:
+        return None
+
+    files = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
+    return files[0]
+
+
+def _thunderbolt_host_commands(name: str, ip: str, user: str, ready: bool) -> list[dict]:
+    install_cmd = (
+        f"ssh {user}@{ip} \"python3 -m pip install --user --upgrade mlx mlx-lm; "
+        "command -v ollama >/dev/null 2>&1 || echo 'Install Ollama first'; "
+        "curl -s http://127.0.0.1:11434/api/tags >/dev/null && echo OLLAMA_API_OK || echo OLLAMA_API_NOT_READY\""
+    )
+    return [
+        {
+            "label": "Inspect Thunderbolt bridge + link state",
+            "command": (
+                f"ssh {user}@{ip} \"networksetup -listallhardwareports; "
+                "ifconfig bridge0 2>/dev/null || true; "
+                "system_profiler SPThunderboltDataType | sed -n '1,80p'\""
+            ),
+        },
+        {
+            "label": "Run full fleet Thunderbolt/MLX probe from admin host",
+            "command": "powershell -ExecutionPolicy Bypass -File .\\probe-lab-minis-thunderbolt-mlx.ps1",
+        },
+        {
+            "label": "Install MLX runtime and verify inference prerequisites",
+            "command": install_cmd if not ready else f"ssh {user}@{ip} \"python3 -c 'import mlx, mlx_lm; print(mlx.__version__, mlx_lm.__version__)'\"",
+        },
+    ]
+
+
+def build_thunderbolt_status() -> dict:
+    users = _load_host_users()
+    workstations = _load_workstations()
+    name_by_ip = {w["ip"]: w["name"] for w in workstations if w.get("ip") and w.get("name")}
+    name_by_key = {(w["name"] or "").lower(): w["name"] for w in workstations if w.get("name")}
+    mac_rows = [w for w in workstations if (w.get("name") or "").startswith("Lab-")]
+    probe_file = _latest_thunderbolt_probe_csv()
+    probe_by_host: dict[str, dict] = {}
+    probe_tb_ip_by_host: dict[str, str] = {}
+
+    if probe_file and probe_file.exists():
+        try:
+            with probe_file.open(encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    host = (row.get("Host") or "").strip()
+                    if host:
+                        probe_by_host[host] = row
+                        tb_ip = (row.get("TB_IP") or "").strip()
+                        if tb_ip and tb_ip.lower() != "none":
+                            probe_tb_ip_by_host[tb_ip] = host
+        except Exception:
+            probe_by_host = {}
+            probe_tb_ip_by_host = {}
+
+    hosts: list[dict] = []
+    links: list[dict] = []
+    seen_links: set[tuple[str, str]] = set()
+
+    for ws in mac_rows:
+        name = ws["name"]
+        ip = ws["ip"]
+        user = ws["user"] or users.get(name, "user")
+        row = probe_by_host.get(name, {})
+
+        status = (row.get("Status") or "PENDING").upper()
+        tb_link = (row.get("TB_Link") or "pending").lower()
+        tb_bridge = row.get("TB_Bridge") or "unknown"
+        tb_ip = row.get("TB_IP") or "unknown"
+        mlx_lm = row.get("MLX_LM") or "unknown"
+        mlx = row.get("MLX") or "unknown"
+
+        try:
+            inf_ready = int(row.get("InferenceReady") or 0)
+        except Exception:
+            inf_ready = 0
+
+        try:
+            wifi_was_on = int(row.get("WiFiWasOn") or 0)
+        except Exception:
+            wifi_was_on = -1  # -1 means no data yet
+
+        connected_names: list[str] = []
+        peers = (row.get("TB_Peers") or "").strip()
+        if peers and peers.lower() != "none":
+            for peer_ip in [x.strip() for x in peers.split(",") if x.strip()]:
+                peer_name = (
+                    name_by_ip.get(peer_ip)
+                    or probe_tb_ip_by_host.get(peer_ip)
+                    or name_by_key.get(peer_ip.lower())
+                    or peer_ip
+                )
+                if peer_name == name:
+                    continue
+                connected_names.append(peer_name)
+                pair = tuple(sorted((name, peer_name)))
+                if pair not in seen_links:
+                    links.append({"a": pair[0], "b": pair[1]})
+                    seen_links.add(pair)
+
+        summary = (
+            "Probe complete and inference-ready"
+            if status == "OK" and inf_ready == 1
+            else "Thunderbolt link active but runtime not ready"
+            if status == "OK" and tb_link == "good"
+            else "Probe complete with partial link state"
+            if status == "OK"
+            else "Probe pending or failed"
+        )
+
+        hosts.append({
+            "name": name,
+            "ip": ip,
+            "user": user,
+            "status": status,
+            "tb_link": tb_link,
+            "tb_bridge": tb_bridge,
+            "tb_ip": tb_ip,
+            "mlx": mlx,
+            "mlx_lm": mlx_lm,
+            "inference_ready": bool(inf_ready),
+            "connected_to": connected_names,
+            "wifi_was_on": wifi_was_on,
+            "summary": summary,
+            "commands": _thunderbolt_host_commands(name, ip, user, bool(inf_ready)),
+        })
+
+    ready = sum(1 for h in hosts if h["inference_ready"])
+    good_links = sum(1 for h in hosts if h["tb_link"] == "good")
+
+    return {
+        "source": str(probe_file) if probe_file else "",
+        "hosts": hosts,
+        "links": links,
+        "summary": {
+            "mac_hosts": len(hosts),
+            "inference_ready": ready,
+            "good_links": good_links,
+        },
+    }
+
+
+def _repair_commands(name: str, host: dict, user: str) -> list[dict]:
+    ip = host.get("ip", "")
+    os_name = (host.get("os") or "unknown").lower()
+
+    if not host.get("reachable"):
+        return [
+            {
+                "label": "Check the network path first",
+                "command": f"ping {ip}",
+            },
+            {
+                "label": "Try SSH once the host answers ping",
+                "command": f"ssh {user}@{ip}",
+            },
+        ]
+
+    if os_name == "linux":
+        return [
+            {
+                "label": "Preferred: run the fix directly from the dashboard button",
+                "command": f"POST http://10.0.0.200:7800/api/remediate/{name}/run",
+            },
+            {
+                "label": "CLI trigger from any Windows admin shell",
+                "command": f"Invoke-WebRequest -Method Post http://10.0.0.200:7800/api/remediate/{name}/run -UseBasicParsing",
+            },
+            {
+                "label": f"Fallback manual repair for {name}",
+                "command": f"python viewer\\deploy.py --host {name}",
+            },
+            {
+                "label": "Watch remediation status",
+                "command": (
+                    f"Invoke-WebRequest http://10.0.0.200:7800/api/remediate/{name}/status -UseBasicParsing "
+                    "| Select-Object -ExpandProperty Content"
+                ),
+            },
+        ]
+
+    if os_name == "darwin":
+        return [
+            {
+                "label": "Preferred: run the macOS bootstrap from the dashboard button",
+                "command": f"POST http://10.0.0.200:7800/api/remediate/{name}/run",
+            },
+            {
+                "label": "CLI trigger from any Windows admin shell",
+                "command": f"Invoke-WebRequest -Method Post http://10.0.0.200:7800/api/remediate/{name}/run -UseBasicParsing",
+            },
+            {
+                "label": "Manual host check",
+                "command": f"ssh {user}@{ip} 'uname -s; test -x ~/nexetra-media/.venv/bin/python && echo PY_READY || echo PY_MISSING'",
+            },
+            {
+                "label": "Watch remediation status",
+                "command": (
+                    f"Invoke-WebRequest http://10.0.0.200:7800/api/remediate/{name}/status -UseBasicParsing "
+                    "| Select-Object -ExpandProperty Content"
+                ),
+            },
+        ]
+
+    return [
+        {
+            "label": "Inspect the host OS and deployment state",
+            "command": f"ssh {user}@{ip} 'uname -a; test -d ~/nexetra-media && echo ROOT_PRESENT || echo ROOT_MISSING'",
+        },
+        {
+            "label": "If it is a Linux viewer target, deploy the runtime",
+            "command": f"python viewer\\deploy.py --host {name}",
+        },
+    ]
+
+
+def build_remediations() -> list[dict]:
+    health = get_health_data().get("hosts", {})
+    users = _load_host_users()
+    with _REMEDIATION_LOCK:
+        run_states = dict(_REMEDIATION_RUNS)
+    out: list[dict] = []
+
+    for name, host in health.items():
+        if host.get("remote_ready"):
+            continue
+
+        user = users.get(name, "user")
+        commands = _repair_commands(name, host, user)
+        out.append({
+            "name": name,
+            "ip": host.get("ip", ""),
+            "os": host.get("os", "unknown"),
+            "reachable": bool(host.get("reachable")),
+            "remote_ready": bool(host.get("remote_ready")),
+            "remote_root": host.get("remote_root", ""),
+            "remote_python": bool(host.get("remote_python")),
+            "user": user,
+            "summary": (
+                "Linux host missing the viewer runtime" if host.get("os") == "Linux"
+                else "macOS host missing nexetra-media bootstrap" if host.get("os") == "Darwin"
+                else "Reachable host that still needs manual inspection"
+            ),
+            "commands": commands,
+            "run_endpoint": f"/api/remediate/{quote(name)}/run",
+            "status_endpoint": f"/api/remediate/{quote(name)}/status",
+            "run_state": run_states.get(name, {"status": "idle"}),
+        })
+
+    return out
+
+
 def get_active_leases() -> list[dict]:
     raw = _read_json(LEASES_FILE) or {}
     now = int(time.time())
     return [x for x in raw.get("leases", []) if x.get("expires_at", 0) > now]
+
+
+def _parse_secrets(path: Path) -> dict[tuple[str, str], str]:
+    if not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    blocks = re.split(r"\n###\s+", text)
+    out: dict[tuple[str, str], str] = {}
+    for block in blocks:
+        ip_m = re.search(r"^-\s*IP:\s*(.+)$", block, re.MULTILINE)
+        user_m = re.search(r"^-\s*Username:\s*(.+)$", block, re.MULTILINE)
+        pass_m = re.search(r"^-\s*Password:\s*(.+)$", block, re.MULTILINE)
+        if not (ip_m and user_m and pass_m):
+            continue
+        out[(ip_m.group(1).strip().lower(), user_m.group(1).strip().lower())] = pass_m.group(1).strip()
+    return out
+
+
+def _load_host_credentials(name: str) -> tuple[str, str, str]:
+    if not WORKSTATIONS_CSV.exists():
+        raise RuntimeError(f"Missing inventory file: {WORKSTATIONS_CSV}")
+
+    secrets = _parse_secrets(SECRETS_FILE)
+    with WORKSTATIONS_CSV.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            if (row.get("name") or "").strip() != name:
+                continue
+            ip = (row.get("ip") or "").strip()
+            user = (row.get("un") or "").strip()
+            pwd = secrets.get((ip.lower(), user.lower()))
+            if not pwd:
+                raise RuntimeError(f"No password found for {name} ({ip} / {user})")
+            return ip, user, pwd
+    raise RuntimeError(f"Host '{name}' not found in {WORKSTATIONS_CSV}")
+
+
+def _make_archive() -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        for p in ROOT.rglob("*"):
+            rel = p.relative_to(ROOT)
+            if should_exclude_archive_path(rel):
+                continue
+            if p.is_file():
+                tf.add(p, arcname=str(rel))
+    return buf.getvalue()
+
+
+def _ssh_run(client: "paramiko.SSHClient", cmd: str, timeout: int = 900) -> tuple[int, str, str]:
+    stdin, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+    out = stdout.read().decode("utf-8", errors="ignore")
+    err = stderr.read().decode("utf-8", errors="ignore")
+    rc = stdout.channel.recv_exit_status()
+    return rc, out, err
+
+
+def _upload_payload(client: "paramiko.SSHClient", archive: bytes, script_path: Path, remote_script: str) -> None:
+    sftp = client.open_sftp()
+    try:
+        with sftp.open("/tmp/nexetra-media-sync.tgz", "wb") as f:
+            f.write(archive)
+        with sftp.open(remote_script, "wb") as f:
+            f.write(script_path.read_bytes())
+    finally:
+        sftp.close()
+
+
+def _bootstrap_linux(client: "paramiko.SSHClient", archive: bytes) -> tuple[int, str, str]:
+    remote_script = "/tmp/nexetra-bootstrap-linux.sh"
+    _upload_payload(client, archive, LINUX_BOOTSTRAP_SCRIPT, remote_script)
+    return _ssh_run(client, f"chmod +x {remote_script}; {remote_script} /tmp/nexetra-media-sync.tgz", timeout=1800)
+
+
+def _bootstrap_mac(client: "paramiko.SSHClient", archive: bytes) -> tuple[int, str, str]:
+    remote_script = "/tmp/nexetra-bootstrap-mac.sh"
+    _upload_payload(client, archive, MAC_BOOTSTRAP_SCRIPT, remote_script)
+    return _ssh_run(client, f"chmod +x {remote_script}; {remote_script} /tmp/nexetra-media-sync.tgz", timeout=1800)
+
+
+def _set_run_state(host: str, update: dict) -> None:
+    with _REMEDIATION_LOCK:
+        existing = _REMEDIATION_RUNS.get(host, {})
+        existing.update(update)
+        _REMEDIATION_RUNS[host] = existing
+
+
+def _run_remediation(host: str) -> None:
+    run_id = str(uuid.uuid4())
+    _set_run_state(host, {
+        "run_id": run_id,
+        "host": host,
+        "status": "running",
+        "started_at": time.time(),
+        "ended_at": 0,
+        "exit_code": None,
+        "stdout": "",
+        "stderr": "",
+        "error": "",
+    })
+
+    if paramiko is None:
+        _set_run_state(host, {
+            "status": "failed",
+            "ended_at": time.time(),
+            "error": "paramiko is not installed on dashboard host",
+        })
+        return
+
+    client = None
+    try:
+        ip, user, pwd = _load_host_credentials(host)
+        health = get_health_data().get("hosts", {}).get(host, {})
+        os_name = (health.get("os") or "").lower()
+
+        archive = _make_archive()
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            ip,
+            username=user,
+            password=pwd,
+            timeout=15,
+            banner_timeout=15,
+            auth_timeout=15,
+            look_for_keys=False,
+            allow_agent=False,
+        )
+
+        if os_name == "darwin":
+            rc, out, err = _bootstrap_mac(client, archive)
+        else:
+            rc, out, err = _bootstrap_linux(client, archive)
+
+        _set_run_state(host, {
+            "status": "done" if rc == 0 else "failed",
+            "ended_at": time.time(),
+            "exit_code": rc,
+            "stdout": out[-8000:],
+            "stderr": err[-4000:],
+        })
+    except Exception as exc:
+        _set_run_state(host, {
+            "status": "failed",
+            "ended_at": time.time(),
+            "error": str(exc),
+        })
+    finally:
+        if client is not None:
+            client.close()
 
 
 def _safe_output_path(rel_path: str) -> Path:
@@ -294,6 +766,8 @@ def build_snapshot() -> dict:
         "health":  get_health_data(),
         "leases":  get_active_leases(),
         "jobs":    get_jobs(),
+        "remediations": build_remediations(),
+        "thunderbolt": build_thunderbolt_status(),
         "history": get_history(),
         "runs":    get_run_archive(),
         "ts":      time.time(),
@@ -359,6 +833,31 @@ async def api_snapshot():
     return build_snapshot()
 
 
+@app.post("/api/remediate/{host}/run")
+async def api_run_remediation(host: str):
+    hosts = get_health_data().get("hosts", {})
+    if host not in hosts:
+        raise HTTPException(status_code=404, detail=f"Unknown host: {host}")
+
+    with _REMEDIATION_LOCK:
+        active = _REMEDIATION_RUNS.get(host)
+        if active and active.get("status") == "running":
+            return {"ok": True, "host": host, "status": "running", "run_id": active.get("run_id")}
+
+    t = threading.Thread(target=_run_remediation, args=(host,), daemon=True)
+    t.start()
+    return {"ok": True, "host": host, "status": "started"}
+
+
+@app.get("/api/remediate/{host}/status")
+async def api_remediation_status(host: str):
+    with _REMEDIATION_LOCK:
+        run = _REMEDIATION_RUNS.get(host)
+    if not run:
+        return {"host": host, "status": "idle"}
+    return run
+
+
 @app.get("/browse/{rel_path:path}", response_class=HTMLResponse)
 async def browse_output(rel_path: str = ""):
     target = _safe_output_path(rel_path or ".")
@@ -385,6 +884,21 @@ async def _sse_generator() -> AsyncGenerator[str, None]:
         except Exception as exc:
             yield f"data: {{\"error\": \"{exc}\"}}\n\n"
         await asyncio.sleep(4)
+
+
+@app.post("/api/upload-telemetry")
+async def api_upload_telemetry(request: Request):
+    """Accept a raw CSV body (text/csv) and persist it as the latest thunderbolt probe snapshot."""
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty body")
+    THUNDERBOLT_TELEMETRY.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    latest = THUNDERBOLT_TELEMETRY / "thunderbolt-mlx-probe-latest.csv"
+    stamped = THUNDERBOLT_TELEMETRY / f"thunderbolt-mlx-probe-{ts}.csv"
+    latest.write_bytes(body)
+    stamped.write_bytes(body)
+    return {"ok": True, "saved": str(latest), "timestamp": ts}
 
 
 @app.get("/events")
