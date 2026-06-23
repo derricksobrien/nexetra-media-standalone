@@ -1,5 +1,7 @@
 {
   "job_id": "what-is-nexetra-live-es",
+  "job_version": 1,
+  "job_type": "media_pipeline",
   "title": "What is Nexetra?",
   "duration_seconds": 60,
   "languages": ["en", "es"],
@@ -13,5 +15,14 @@
     "assembly": 0.5,
     "export": 0.5
   },
-  "status": "live-test"
+  "status": "live-test",
+  "execution_policy": {
+    "priority": "normal",
+    "max_nodes": 2,
+    "retry_budget": 1
+  },
+  "success_criteria": {
+    "required_artifacts": ["{language}/script.json", "{language}/audio.wav", "{language}/{format}.mp4"],
+    "minimum_language_completion": 2
+  }
 }

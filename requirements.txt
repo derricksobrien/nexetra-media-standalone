@@ -4,3 +4,4 @@ edge-tts>=6.1.12
 Pillow>=10.4.0
 imageio-ffmpeg>=0.5.1
 paramiko>=3.4.0
+jsonschema>=4.23.0,<5

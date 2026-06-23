@@ -15,12 +15,18 @@ USAGE:
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _job_output_dir(job_id: str) -> Path:
+    override = os.environ.get("NEXETRA_JOB_OUTPUT_DIR")
+    return Path(override) if override else ROOT / "output" / job_id
 
 
 def _resolve_ffmpeg() -> str | None:
@@ -47,7 +53,7 @@ def _make_stub(path: Path) -> None:
     path.write_bytes(b"DRY_RUN_STUB")
 
 
-def _export_one(lang_dir: Path, dry_run: bool) -> bool:
+def _export_one(lang_dir: Path, formats: list[str], dry_run: bool) -> bool:
     master_path = lang_dir / "master_16x9.mp4"
     if not master_path.exists():
         print(f"  SKIP: {master_path.relative_to(ROOT)} is missing", file=sys.stderr)
@@ -57,11 +63,16 @@ def _export_one(lang_dir: Path, dry_run: bool) -> bool:
     out_9x16 = lang_dir / "9x16.mp4"
     out_1x1 = lang_dir / "1x1.mp4"
 
+    output_paths = {
+        "16:9": out_16x9,
+        "9:16": out_9x16,
+        "1:1": out_1x1,
+    }
+
     if dry_run:
         print(f"  [DRY RUN] Would export variants for {lang_dir.name}")
-        _make_stub(out_16x9)
-        _make_stub(out_9x16)
-        _make_stub(out_1x1)
+        for output_format in formats:
+            _make_stub(output_paths[output_format])
         return True
 
     ffmpeg = _resolve_ffmpeg()
@@ -72,11 +83,11 @@ def _export_one(lang_dir: Path, dry_run: bool) -> bool:
         )
         return False
 
-    # 16:9 output is a direct copy from master.
-    shutil.copyfile(master_path, out_16x9)
+    if "16:9" in formats:
+        shutil.copyfile(master_path, out_16x9)
 
     # 9:16 vertical center-crop from 16:9 source.
-    ok_9x16 = _run_ffmpeg([
+    ok_9x16 = "9:16" not in formats or _run_ffmpeg([
         ffmpeg, "-y",
         "-i", str(master_path),
         "-vf", "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
@@ -86,7 +97,7 @@ def _export_one(lang_dir: Path, dry_run: bool) -> bool:
     ])
 
     # 1:1 square center-crop from 16:9 source.
-    ok_1x1 = _run_ffmpeg([
+    ok_1x1 = "1:1" not in formats or _run_ffmpeg([
         ffmpeg, "-y",
         "-i", str(master_path),
         "-vf", "crop=ih:ih:(iw-ih)/2:0,scale=1080:1080",
@@ -101,17 +112,24 @@ def _export_one(lang_dir: Path, dry_run: bool) -> bool:
 def run(job_path: Path, dry_run: bool = False) -> list[Path]:
     """Export all languages listed in the job. Returns written files."""
     job = json.loads(job_path.read_text(encoding="utf-8"))
+    return run_from_job(job, dry_run=dry_run)
+
+
+def run_from_job(job: dict, dry_run: bool = False) -> list[Path]:
+    """Export all requested language/format pairs from an already loaded job."""
     job_id = job["job_id"]
     languages = job.get("languages", ["en"])
+    formats = job.get("formats", ["16:9"])
     written: list[Path] = []
 
     for lang in languages:
-        lang_dir = ROOT / "output" / job_id / lang
+        lang_dir = _job_output_dir(job_id) / lang
         print(f"Export -> {lang} ...")
-        ok = _export_one(lang_dir, dry_run=dry_run)
+        ok = _export_one(lang_dir, formats=formats, dry_run=dry_run)
         if not ok:
             continue
-        for name in ("16x9.mp4", "9x16.mp4", "1x1.mp4"):
+        names = {"16:9": "16x9.mp4", "9:16": "9x16.mp4", "1:1": "1x1.mp4"}
+        for name in (names[output_format] for output_format in formats):
             path = lang_dir / name
             if path.exists():
                 written.append(path)
@@ -125,7 +143,13 @@ def main() -> None:
     parser.add_argument("--job", required=True, help="Path to job JSON file")
     parser.add_argument("--dry-run", action="store_true", help="Write stubs only")
     args = parser.parse_args()
-    run(Path(args.job), dry_run=args.dry_run)
+    job_path = Path(args.job)
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    expected = len(job.get("languages", ["en"])) * len(job.get("formats", ["16:9"]))
+    written = run(job_path, dry_run=args.dry_run)
+    if len(written) != expected:
+        print(f"ERROR: Export completed {len(written)}/{expected} required artifacts.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

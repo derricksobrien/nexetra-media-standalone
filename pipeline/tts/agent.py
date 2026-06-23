@@ -21,6 +21,7 @@ No Mac Mini needed.
 import argparse
 import asyncio
 import json
+import os
 import struct
 import sys
 import wave
@@ -45,6 +46,11 @@ VOICE_MAP = {
     "da":  "da-DK-ChristelNeural",
     "fi":  "fi-FI-NooraNeural",
 }
+
+
+def _job_output_dir(job_id: str) -> Path:
+    override = os.environ.get("NEXETRA_JOB_OUTPUT_DIR")
+    return Path(override) if override else ROOT / "output" / job_id
 
 
 def _script_to_ssml(script: dict) -> str:
@@ -121,13 +127,14 @@ def run(job_path: Path, dry_run: bool = False) -> list[Path]:
     written = []
 
     for lang in languages:
-        script_path = ROOT / "output" / job_id / lang / "script.json"
+        job_output = _job_output_dir(job_id)
+        script_path = job_output / lang / "script.json"
         if not script_path.exists():
             print(f"  SKIP {lang}: no script.json at {script_path.relative_to(ROOT)}", file=sys.stderr)
             continue
 
         script = json.loads(script_path.read_text(encoding="utf-8"))
-        out_dir = ROOT / "output" / job_id / lang
+        out_dir = job_output / lang
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "audio.wav"
 
@@ -150,7 +157,13 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="Write silent WAV placeholders, skip real synthesis")
     args = parser.parse_args()
-    run(Path(args.job), dry_run=args.dry_run)
+    job_path = Path(args.job)
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    expected = len(job.get("languages", ["en"]))
+    written = run(job_path, dry_run=args.dry_run)
+    if len(written) != expected:
+        print(f"ERROR: TTS completed {len(written)}/{expected} required languages.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

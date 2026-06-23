@@ -1,0 +1,21 @@
+{
+  "job_id": "stage0-media-en-es-baseline",
+  "job_version": 1,
+  "job_type": "media_pipeline",
+  "title": "Stage 0 English Spanish Media Fixture",
+  "duration_seconds": 1,
+  "languages": ["en", "es"],
+  "formats": ["16:9", "9:16", "1:1"],
+  "style": "slides",
+  "cta": "Stage 0 validation",
+  "status": "test",
+  "execution_policy": {
+    "priority": "low",
+    "max_nodes": 1,
+    "retry_budget": 0
+  },
+  "success_criteria": {
+    "required_artifacts": ["{language}/script.json", "{language}/audio.wav", "{language}/{format}.mp4"],
+    "minimum_language_completion": 2
+  }
+}

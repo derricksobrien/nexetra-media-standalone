@@ -1,5 +1,7 @@
 {
   "job_id": "content-summer-campaign-v1",
+  "job_version": 1,
+  "job_type": "content_development",
   "title": "Summer Campaign Multi-Market Pack",
   "duration_seconds": 90,
   "languages": ["en", "es", "fr", "de", "pt"],
@@ -30,7 +32,7 @@
     "tts_primary": "xtts-default"
   },
   "success_criteria": {
-    "required_artifacts": ["script.json", "audio.wav", "16x9.mp4", "9x16.mp4", "1x1.mp4"],
+    "required_artifacts": ["plan.json", "{language}/variants.json", "review.json", "package.json"],
     "minimum_language_completion": 5
   }
 }

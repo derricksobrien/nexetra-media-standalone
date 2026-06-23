@@ -18,12 +18,14 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import io
 import json
 import os
 import re
 import socket
 import subprocess
 import sys
+import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,8 +35,28 @@ import yaml
 
 try:
     from pipeline.run_history import append_run_event
+    from pipeline.job_control import validate_job_path
+    from pipeline.handler_registry import get_handler
+    from pipeline.execution import (
+        RunManifest,
+        ensure_executable_job,
+        evaluate_stage_artifacts,
+        evaluate_success_criteria,
+        make_stage_result,
+    )
+    from pipeline.provenance import source_files
 except ModuleNotFoundError:
     from run_history import append_run_event
+    from job_control import validate_job_path
+    from handler_registry import get_handler
+    from execution import (
+        RunManifest,
+        ensure_executable_job,
+        evaluate_stage_artifacts,
+        evaluate_success_criteria,
+        make_stage_result,
+    )
+    from provenance import source_files
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -62,6 +84,8 @@ def _log_event(
     stage: str = "",
     host: str = "",
     detail: str = "",
+    run_id: str = "",
+    provenance: dict | None = None,
 ) -> None:
     """Append a JSON event line to job_runs.jsonl (best-effort, never raises)."""
     append_run_event({
@@ -71,6 +95,8 @@ def _log_event(
         "host": host,
         "detail": detail,
         "runner": "run_batch_pool",
+        "run_id": run_id,
+        **(provenance or {}),
     })
 
 
@@ -226,9 +252,9 @@ def _sftp_download_tree(sftp: paramiko.SFTPClient, remote_dir: str, local_dir: P
             sftp.get(remote_path, str(local_path))
 
 
-def sync_remote_artifacts(host: Host, remote_root: str, job_id: str) -> tuple[bool, str]:
-    remote_job_dir = f"{remote_root.rstrip('/')}/output/{job_id}"
-    local_job_dir = REPO_ROOT / "output" / job_id
+def sync_remote_artifacts(host: Host, remote_root: str, job_id: str, run_id: str) -> tuple[bool, str]:
+    remote_job_dir = f"{remote_root.rstrip('/')}/output/{job_id}/runs/{run_id}"
+    local_job_dir = REPO_ROOT / "output" / job_id / "runs" / run_id
     client = None
     sftp = None
     try:
@@ -251,6 +277,120 @@ def sync_remote_artifacts(host: Host, remote_root: str, job_id: str) -> tuple[bo
                 pass
 
 
+def _worker_source_archive() -> bytes:
+    buffer = io.BytesIO()
+    paths = source_files(REPO_ROOT)
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for path in paths:
+            archive.add(path, arcname=path.relative_to(REPO_ROOT).as_posix())
+        manifest_bytes = json.dumps({
+            "files": [path.relative_to(REPO_ROOT).as_posix() for path in paths],
+        }, indent=2).encode("utf-8")
+        info = tarfile.TarInfo(".nexetra-source-manifest.json")
+        info.size = len(manifest_bytes)
+        info.mtime = int(time.time())
+        archive.addfile(info, io.BytesIO(manifest_bytes))
+    return buffer.getvalue()
+
+
+def sync_worker_source(host: Host, remote_root: str, source_sha_value: str) -> tuple[bool, str]:
+    remote_archive = f"/tmp/nexetra-media-{source_sha_value[:16]}.tgz"
+    client = None
+    sftp = None
+    try:
+        payload = _worker_source_archive()
+        client = _connect_ssh(host)
+        sftp = client.open_sftp()
+        with sftp.open(remote_archive, "wb") as handle:
+            handle.write(payload)
+        command = (
+            f"mkdir -p '{remote_root}' && "
+            f"tar -xzf '{remote_archive}' -C '{remote_root}' && "
+            f"rm -f '{remote_archive}'"
+        )
+        stdin, stdout, stderr = client.exec_command(command, timeout=180)
+        out = stdout.read().decode("utf-8", errors="replace")
+        err = stderr.read().decode("utf-8", errors="replace")
+        code = stdout.channel.recv_exit_status()
+        return code == 0, (err or out or f"uploaded {len(payload)} bytes").strip()
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        if sftp is not None:
+            sftp.close()
+        if client is not None:
+            client.close()
+
+
+def sync_run_record(host: Host, remote_root: str, manifest: RunManifest) -> tuple[bool, str]:
+    remote_dir = f"{remote_root.rstrip('/')}/output/runs/{manifest.run_id}"
+    client = None
+    sftp = None
+    try:
+        code, _, error = remote_run(host, f"mkdir -p '{remote_dir}'", timeout=30)
+        if code != 0:
+            return False, error
+        client = _connect_ssh(host)
+        sftp = client.open_sftp()
+        sftp.put(str(manifest.path), f"{remote_dir}/run_manifest.json")
+        summary = manifest.run_dir / "run_summary.md"
+        if summary.is_file():
+            sftp.put(str(summary), f"{remote_dir}/run_summary.md")
+        return True, f"synced run record to {remote_dir}"
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        if sftp is not None:
+            sftp.close()
+        if client is not None:
+            client.close()
+
+
+def run_worker_preflight(
+    host: Host,
+    remote_root: str,
+    job: str,
+    job_id: str,
+    run_id: str,
+) -> tuple[int, dict, str]:
+    job_arg = job.replace("\\", "/")
+    artifact_root = f"{remote_root.rstrip('/')}/output/{job_id}/runs/{run_id}"
+    command = (
+        f"cd '{remote_root}' && .venv/bin/python pipeline/worker_preflight.py "
+        f"--job '{job_arg}' --artifact-root '{artifact_root}'"
+    )
+    try:
+        code, out, err = remote_run(host, command, timeout=180)
+        report = json.loads(out) if out.strip() else {}
+        return code, report, err[-4000:]
+    except Exception as exc:
+        return -1, {}, f"{type(exc).__name__}: {exc}"
+
+
+def worker_preflight_matches(
+    report: dict,
+    expected_provenance: dict,
+    required_stages: list[str],
+    required_models: list[str] | None = None,
+) -> tuple[bool, list[str]]:
+    errors: list[str] = []
+    actual = report.get("provenance", {})
+    for key in ("source_sha", "job_sha", "dependency_sha"):
+        if actual.get(key) != expected_provenance.get(key):
+            errors.append(f"{key} mismatch")
+    if not report.get("artifact_writable"):
+        errors.append("artifact root is not writable")
+    capabilities = report.get("capabilities", {})
+    for stage in required_stages:
+        if not capabilities.get(stage):
+            errors.append(f"missing stage capability: {stage}")
+    available_models = set(report.get("models", {}).get("ollama", []))
+    for model in required_models or []:
+        if model not in available_models:
+            errors.append(f"missing model: {model}")
+    return not errors, errors
+
+
 def load_leases() -> dict:
     if not LEASES_FILE.exists():
         return {"leases": []}
@@ -264,7 +404,7 @@ def save_leases(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def acquire_hosts(candidates: list[Host], job: str) -> list[Host]:
+def acquire_hosts(candidates: list[Host], job: str, limit: int | None = None) -> list[Host]:
     lease_data = load_leases()
     now = int(time.time())
 
@@ -276,8 +416,7 @@ def acquire_hosts(candidates: list[Host], job: str) -> list[Host]:
 
     available = [h for h in candidates if h.name not in active_names and tcp_open(h.ip, 22)]
 
-    # Keep DGX if present plus all reachable free workers.
-    selected = sorted(available, key=lambda h: (0 if h.name.startswith("gx10") else 1, h.name))
+    selected = available[:limit] if limit else available
     ttl = 2 * 60 * 60
     for host in selected:
         lease_data.setdefault("leases", []).append(
@@ -401,14 +540,28 @@ def write_health_report(data: dict[str, dict]) -> Path:
     return latest
 
 
-def run_local_stage(stage: str, script: str, job: str, dry_run: bool) -> bool:
+def run_local_stage(stage: str, script: str, job: str, dry_run: bool, output_dir: Path) -> tuple[int, str]:
     cmd = [sys.executable, script, "--job", job]
     if dry_run:
         cmd.append("--dry-run")
 
     print(f"\n=== Stage: {stage} (local) ===")
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
-    return result.returncode == 0
+    environment = os.environ.copy()
+    environment["NEXETRA_JOB_OUTPUT_DIR"] = str(output_dir)
+    result = subprocess.run(
+        cmd,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=environment,
+    )
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip(), file=sys.stderr)
+    return result.returncode, (result.stderr or result.stdout)[-4000:]
 
 
 def run_remote_stage(
@@ -418,15 +571,15 @@ def run_remote_stage(
     job: str,
     dry_run: bool,
     remote_roots: list[str],
-) -> bool:
+    remote_root: str,
+    job_id: str,
+    run_id: str,
+) -> tuple[int, str]:
     dry = " --dry-run" if dry_run else ""
     job_arg = job.replace("\\", "/")
-    root_candidates = " ".join([f'"{p}"' for p in remote_roots])
+    artifact_root = f"{remote_root.rstrip('/')}/output/{job_id}/runs/{run_id}"
     cmd = (
-        "ROOT=''; "
-        f"for p in {root_candidates}; do case \"$p\" in \"~/\"*) p=\"$HOME/${{p#??}}\" ;; esac; if [ -d \"$p\" ]; then ROOT=$p; break; fi; done; "
-        "if [ -z \"$ROOT\" ]; then echo 'REMOTE_ROOT_NOT_FOUND'; exit 2; fi; "
-        "cd \"$ROOT\" && .venv/bin/python "
+        f"cd '{remote_root}' && NEXETRA_JOB_OUTPUT_DIR='{artifact_root}' .venv/bin/python "
         f"{script} --job '{job_arg}'{dry}"
     )
 
@@ -437,10 +590,10 @@ def run_remote_stage(
             print(out.strip())
         if err.strip():
             print(err.strip())
-        return code == 0
+        return code, (err or out)[-4000:]
     except Exception as exc:
         print(f"Remote stage error on {host.name}: {exc}")
-        return False
+        return -1, str(exc)
 
 
 def pick_stage_host(stage: str, hosts: list[Host], health: dict[str, dict]) -> Host | None:
@@ -482,7 +635,35 @@ def main() -> None:
         action="store_true",
         help="Only run host runner health checks and write report",
     )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate JCL and exit before inventory, SSH, leases, or artifacts",
+    )
     args = parser.parse_args()
+
+    job_path = Path(args.job)
+    if not job_path.is_absolute():
+        job_path = REPO_ROOT / job_path
+    validation = validate_job_path(job_path)
+    if args.validate_only or not validation["valid"]:
+        print(json.dumps(validation, indent=2, ensure_ascii=False))
+    if not validation["valid"]:
+        sys.exit(2)
+    if args.validate_only:
+        return
+
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    try:
+        ensure_executable_job(job)
+    except ValueError as exc:
+        print(json.dumps({"valid": True, "executable": False, "job_id": job.get("job_id"), "error": str(exc)}, indent=2))
+        sys.exit(3)
+    handler = get_handler(job["job_type"])
+    if handler is None:
+        print(json.dumps({"valid": True, "executable": False, "job_id": job.get("job_id"), "error": f"No handler for {job.get('job_type')}"}, indent=2))
+        sys.exit(3)
+    active_stages = [(stage.name, stage.script) for stage in handler.stages]
 
     conf = load_config()
     pool_conf = conf.get("compute_pool", {}) if isinstance(conf, dict) else {}
@@ -526,7 +707,11 @@ def main() -> None:
         print("No remote-ready hosts detected; runner will rely on local fallback where needed.")
 
     selected_pool = remote_ready if remote_ready else candidates
-    selected = acquire_hosts(selected_pool, job=args.job)
+    selected_pool = sorted(
+        selected_pool,
+        key=lambda host: (0 if host.name == "ubuntu-1" else 1 if host.name.startswith("ubuntu-") else 2 if host.name.startswith("Lab-") else 3, host.name),
+    )
+    selected = acquire_hosts(selected_pool, job=args.job, limit=1)
     if not selected:
         raise RuntimeError("No free/reachable hosts available in compute pool")
 
@@ -534,72 +719,205 @@ def main() -> None:
     for h in selected:
         print(f"- {h.name} ({h.ip})")
 
-    _log_event(args.job, "batch_start", detail=f"hosts={[h.name for h in selected]}")
-
-    # Prefer one non-DGX remote-ready worker as the execution anchor so stage
-    # artifacts stay on a single filesystem between stages.
-    anchor_host = next(
-        (h for h in selected if health.get(h.name, {}).get("remote_ready") and not h.name.startswith("gx10")),
-        None,
-    )
-    if anchor_host is None:
-        anchor_host = next((h for h in selected if health.get(h.name, {}).get("remote_ready")), None)
-
-    if anchor_host:
-        print(f"Execution anchor host: {anchor_host.name} ({anchor_host.ip})")
+    manifest = RunManifest(job, args.job, runner="run_batch_pool", dry_run=args.dry_run)
+    provenance = manifest.data["provenance"]
+    _log_event(args.job, "batch_start", detail=f"hosts={[h.name for h in selected]}", run_id=manifest.run_id, provenance=provenance)
 
     success = True
+    anchor_host: Host | None = None
     try:
-        for stage, script in STAGES:
-            host = anchor_host or pick_stage_host(stage, selected, health=health)
-            ok = False
+        ordered_candidates = sorted(
+            selected,
+            key=lambda host: (0 if host.name.startswith("ubuntu-") else 1 if host.name.startswith("Lab-") else 2, host.name),
+        )
+        for candidate in ordered_candidates:
+            remote_root = health.get(candidate.name, {}).get("remote_root", "")
+            if not remote_root:
+                continue
+            preflight_started = time.time()
+            _log_event(args.job, "stage_start", stage="worker_preflight", host=candidate.name, run_id=manifest.run_id, provenance=provenance)
+            sync_ok, sync_detail = sync_worker_source(candidate, remote_root, provenance["source_sha"])
+            code, report, preflight_error = (-1, {}, sync_detail)
+            if sync_ok:
+                code, report, preflight_error = run_worker_preflight(
+                    candidate,
+                    remote_root=remote_root,
+                    job=args.job,
+                    job_id=job_id,
+                    run_id=manifest.run_id,
+                )
+            matches, match_errors = worker_preflight_matches(
+                report,
+                expected_provenance=provenance,
+                required_stages=list(handler.capability_names),
+            )
+            preflight_record = {
+                "host": candidate.name,
+                "ip": candidate.ip,
+                "remote_root": remote_root,
+                "source_sync": {"passed": sync_ok, "detail": sync_detail},
+                "report": report,
+                "matched": code == 0 and matches,
+                "errors": ([preflight_error] if preflight_error else []) + match_errors,
+            }
+            manifest.add_preflight(preflight_record)
+            preflight_passed = code == 0 and matches
+            manifest.add_stage(make_stage_result(
+                stage="worker_preflight",
+                status="passed" if preflight_passed else "failed",
+                host=candidate.name,
+                returncode=code,
+                started_at=preflight_started,
+                outputs=[],
+                error="" if preflight_passed else "; ".join(preflight_record["errors"]),
+            ))
+            _log_event(
+                args.job,
+                "stage_pass" if preflight_passed else "stage_fail",
+                stage="worker_preflight",
+                host=candidate.name,
+                detail="hashes and capabilities matched" if preflight_passed else "; ".join(preflight_record["errors"]),
+                run_id=manifest.run_id,
+                provenance=provenance,
+            )
+            if preflight_passed:
+                anchor_host = candidate
+                break
+
+        if anchor_host:
+            print(f"Execution anchor host: {anchor_host.name} ({anchor_host.ip})")
+        elif not args.allow_local_fallback:
+            detail = "No worker passed source, job, dependency, capability, and artifact-root preflight"
+            manifest.finalize("failed", error=detail)
+            _log_event(args.job, "batch_fail", detail=detail, run_id=manifest.run_id, provenance=provenance)
+            sys.exit(1)
+        else:
+            print("No worker passed preflight; using explicit local fallback.")
+
+        for stage, script in active_stages:
+            host = anchor_host
+            code = -1
+            error = "No eligible execution host"
+            warnings: list[str] = []
             host_name = host.name if host else "local"
-            _log_event(args.job, "stage_start", stage=stage, host=host_name)
+            stage_started = time.time()
+            _log_event(args.job, "stage_start", stage=stage, host=host_name, run_id=manifest.run_id, provenance=provenance)
             if host:
-                ok = run_remote_stage(
+                code, error = run_remote_stage(
                     stage,
                     script,
                     host=host,
                     job=args.job,
                     dry_run=args.dry_run,
                     remote_roots=remote_roots,
+                    remote_root=health[host.name]["remote_root"],
+                    job_id=job_id,
+                    run_id=manifest.run_id,
                 )
-            if (not ok) and args.allow_local_fallback:
-                print(f"Falling back to local for stage: {stage}")
-                ok = run_local_stage(stage, script, job=args.job, dry_run=args.dry_run)
-
-            if ok:
-                _log_event(args.job, "stage_pass", stage=stage, host=host_name)
             else:
-                _log_event(args.job, "stage_fail", stage=stage, host=host_name)
+                code, error = run_local_stage(stage, script, job=args.job, dry_run=args.dry_run, output_dir=manifest.artifact_root)
+                host_name = "local"
+            if code != 0 and host is not None and args.allow_local_fallback:
+                warnings.append(f"Remote attempt on {host_name} failed: {error}")
+                print(f"Falling back to local for stage: {stage}")
+                code, error = run_local_stage(stage, script, job=args.job, dry_run=args.dry_run, output_dir=manifest.artifact_root)
+                host_name = "local"
+
+            artifact_check = (
+                evaluate_stage_artifacts(job, stage, output_dir=manifest.artifact_root, allow_stubs=args.dry_run)
+                if code == 0 and host_name == "local"
+                else {"passed": code == 0, "outputs": [], "missing": [], "validation": []}
+            )
+            ok = code == 0 and artifact_check["passed"]
+            if code == 0 and artifact_check.get("missing"):
+                error = f"Missing required stage artifacts: {artifact_check['missing']}"
+            result = make_stage_result(
+                stage=stage,
+                status="passed" if ok else "failed",
+                host=host_name,
+                returncode=code,
+                started_at=stage_started,
+                outputs=artifact_check.get("outputs", []),
+                error="" if ok else error,
+                warnings=warnings,
+            )
+            manifest.add_stage(result)
+            if ok:
+                _log_event(args.job, "stage_pass", stage=stage, host=host_name, run_id=manifest.run_id, provenance=provenance)
+            else:
+                _log_event(args.job, "stage_fail", stage=stage, host=host_name, detail=error, run_id=manifest.run_id, provenance=provenance)
                 print(f"Stage failed: {stage}")
                 success = False
                 break
 
         if success:
             if anchor_host and health.get(anchor_host.name, {}).get("remote_root"):
-                _log_event(args.job, "stage_start", stage="artifact_sync", host=anchor_host.name)
+                sync_started = time.time()
+                _log_event(args.job, "stage_start", stage="artifact_sync", host=anchor_host.name, run_id=manifest.run_id, provenance=provenance)
                 ok, detail = sync_remote_artifacts(
                     anchor_host,
                     remote_root=health[anchor_host.name]["remote_root"],
                     job_id=job_id,
+                    run_id=manifest.run_id,
                 )
                 if ok:
-                    _log_event(args.job, "stage_pass", stage="artifact_sync", host=anchor_host.name, detail=detail)
+                    _log_event(args.job, "stage_pass", stage="artifact_sync", host=anchor_host.name, detail=detail, run_id=manifest.run_id, provenance=provenance)
                     print(f"\n=== Stage: artifact_sync (remote: {anchor_host.name}) ===")
                     print(detail)
                 else:
-                    _log_event(args.job, "stage_fail", stage="artifact_sync", host=anchor_host.name, detail=detail)
+                    _log_event(args.job, "stage_fail", stage="artifact_sync", host=anchor_host.name, detail=detail, run_id=manifest.run_id, provenance=provenance)
                     print(f"\n=== Stage: artifact_sync (remote: {anchor_host.name}) ===")
                     print(f"Artifact sync failed: {detail}")
                     success = False
+                manifest.add_stage(make_stage_result(
+                    stage="artifact_sync",
+                    status="passed" if ok else "failed",
+                    host=anchor_host.name,
+                    returncode=0 if ok else 1,
+                    started_at=sync_started,
+                    outputs=[f"output/{job_id}"] if ok else [],
+                    error="" if ok else detail,
+                ))
 
         if success:
-            _log_event(args.job, "batch_done", detail="all stages passed")
+            evaluation = evaluate_success_criteria(job, output_dir=manifest.artifact_root, allow_stubs=args.dry_run)
+            if not evaluation["passed"]:
+                success = False
+                failure_detail = f"Success criteria failed: missing={evaluation['missing']} empty={evaluation['empty']}"
+            else:
+                failure_detail = ""
+        else:
+            evaluation = evaluate_success_criteria(job, output_dir=manifest.artifact_root, allow_stubs=args.dry_run)
+            failure_detail = next((stage.get("error", "") for stage in reversed(manifest.data["stages"]) if stage["status"] == "failed"), "batch failed")
+
+        if success:
+            manifest.finalize("done", evaluation=evaluation)
+            record_ok, record_detail = sync_run_record(anchor_host, health[anchor_host.name]["remote_root"], manifest) if anchor_host else (True, "local manifest")
+            if not record_ok:
+                success = False
+                failure_detail = f"Run record sync failed: {record_detail}"
+                manifest.finalize("failed", error=failure_detail, evaluation=evaluation)
+                if anchor_host:
+                    sync_run_record(anchor_host, health[anchor_host.name]["remote_root"], manifest)
+        if success:
+            _log_event(args.job, "batch_done", detail="all stages and success criteria passed", run_id=manifest.run_id, provenance=provenance)
             print("\nBatch completed successfully.")
         else:
-            _log_event(args.job, "batch_fail")
+            if manifest.data["status"] != "failed":
+                manifest.finalize("failed", error=failure_detail, evaluation=evaluation)
+            if anchor_host:
+                sync_run_record(anchor_host, health[anchor_host.name]["remote_root"], manifest)
+            _log_event(args.job, "batch_fail", detail=failure_detail, run_id=manifest.run_id, provenance=provenance)
             sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        detail = f"{type(exc).__name__}: {exc}"
+        manifest.finalize("failed", error=detail)
+        if anchor_host:
+            sync_run_record(anchor_host, health[anchor_host.name]["remote_root"], manifest)
+        _log_event(args.job, "batch_fail", detail=detail, run_id=manifest.run_id, provenance=provenance)
+        raise
     finally:
         print("\nReleasing compute resources back to pool...")
         release_hosts(selected, job=args.job)

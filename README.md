@@ -93,6 +93,61 @@ Detailed timestamped plans:
 
 ## Distributed Compute Pool Runner
 
+## Job Control Language V1
+
+Job definitions use the versioned JSON contract at
+`jobs/schema/job-v1.schema.json`. Validate the complete committed catalog before
+deployment or execution:
+
+```powershell
+python pipeline/validate_job.py --all
+```
+
+Validate one job without allocating hosts, opening SSH connections, writing run
+history, or creating artifacts:
+
+```powershell
+python pipeline/run_batch_pool.py --job jobs/what-is-nexetra-live-es.json --validate-only
+python pipeline/run_job.py --job jobs/what-is-nexetra-live-es.json --validate-only
+```
+
+Both runners reject invalid JCL with exit code `2` before execution begins.
+
+## Run Manifests
+
+Executable media jobs create a unique run directory at
+`output/runs/<run_id>/` containing:
+
+- `run_manifest.json`: atomic machine-readable run, stage, heartbeat, output, and
+  success-criteria state.
+- `run_summary.md`: operator-readable terminal summary.
+
+Dashboard progress and run status are derived from these manifests. A job reaches
+`done` only after every required stage and final artifact criterion passes. Running
+manifests without a heartbeat for 15 minutes are marked `abandoned`.
+
+JCL job types whose execution handlers are not implemented are rejected with exit
+code `3`; they are not sent through the media pipeline.
+
+## Remote Worker Preflight
+
+The pool runner synchronizes an exact source bundle to one preferred execution
+anchor before running a job. The worker must return matching SHA-256 values for:
+
+- executable source bundle,
+- job document,
+- dependency manifests.
+
+Preflight also verifies Python, writable run-scoped storage, free disk, all required
+media-stage capabilities, and available Ollama/MLX models. A mismatched worker is
+rejected before stages begin. Terminal manifests and summaries are synchronized to
+the dashboard host under `output/runs/<run_id>/`.
+
+Remote artifacts are isolated under
+`output/<job_id>/runs/<run_id>/` and copied back to the same run-scoped path on the
+orchestrator. Stage 3 intentionally leases only one preferred anchor per batch;
+multi-node policy is introduced later.
+
 ## Standalone Clone Setup
 
 This repository is portable and can run independently of the parent workspace.

@@ -16,6 +16,7 @@ OUTPUT:
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -42,6 +43,11 @@ LANGUAGE_NAMES = {
 }
 
 TRANSLATION_MODEL = "gpt-oss:120b"
+
+
+def _job_output_dir(job_id: str) -> Path:
+    override = os.environ.get("NEXETRA_JOB_OUTPUT_DIR")
+    return Path(override) if override else ROOT / "output" / job_id
 
 
 def _load_config() -> dict:
@@ -156,7 +162,8 @@ def run(job_path: Path, dry_run: bool = False) -> list[Path]:
         print("No non-English languages specified in job — nothing to translate.")
         return []
 
-    en_script_path = ROOT / "output" / job_id / "en" / "script.json"
+    job_output = _job_output_dir(job_id)
+    en_script_path = job_output / "en" / "script.json"
     if not en_script_path.exists():
         print(f"ERROR: English script not found at {en_script_path}. Run scriptgen first.", file=sys.stderr)
         sys.exit(1)
@@ -174,7 +181,7 @@ def run(job_path: Path, dry_run: bool = False) -> list[Path]:
             print(f"  FAILED for {lang} — skipping.")
             continue
 
-        out_dir = ROOT / "output" / job_id / lang
+        out_dir = job_output / lang
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "script.json"
         out_path.write_text(json.dumps(translated, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -189,7 +196,13 @@ def main() -> None:
     parser.add_argument("--job", required=True, help="Path to job JSON file")
     parser.add_argument("--dry-run", action="store_true", help="Stub output, skip LLM calls")
     args = parser.parse_args()
-    run(Path(args.job), dry_run=args.dry_run)
+    job_path = Path(args.job)
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    expected = len([lang for lang in job.get("languages", ["en"]) if lang != "en"])
+    written = run(job_path, dry_run=args.dry_run)
+    if len(written) != expected:
+        print(f"ERROR: Translation completed {len(written)}/{expected} required languages.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

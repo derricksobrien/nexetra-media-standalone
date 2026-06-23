@@ -1,5 +1,7 @@
 {
   "job_id": "rag-index-validate-supportkb-v1",
+  "job_version": 1,
+  "job_type": "rag_index_and_validation",
   "title": "RAG Support KB Index and Validation",
   "duration_seconds": 120,
   "languages": ["en", "es"],

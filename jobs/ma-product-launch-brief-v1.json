@@ -1,5 +1,7 @@
 {
   "job_id": "ma-product-launch-brief-v1",
+  "job_version": 1,
+  "job_type": "multi_agent_solution",
   "title": "Multi-Agent Product Launch Brief",
   "duration_seconds": 180,
   "languages": ["en", "es"],

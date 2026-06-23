@@ -1,5 +1,7 @@
 {
   "job_id": "stress-thunderbolt-b",
+  "job_version": 1,
+  "job_type": "media_pipeline",
   "title": "Nexetra Multi-Market Stress B",
   "duration_seconds": 90,
   "languages": ["en", "es", "fr", "de", "pt", "ar", "hi", "ja", "zh"],
@@ -13,5 +15,14 @@
     "assembly": 2.0,
     "export": 2.0
   },
-  "status": "stress-suite"
+  "status": "stress-suite",
+  "execution_policy": {
+    "priority": "normal",
+    "max_nodes": 9,
+    "retry_budget": 1
+  },
+  "success_criteria": {
+    "required_artifacts": ["{language}/script.json", "{language}/audio.wav", "{language}/{format}.mp4"],
+    "minimum_language_completion": 9
+  }
 }

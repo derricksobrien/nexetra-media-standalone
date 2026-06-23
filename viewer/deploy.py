@@ -101,6 +101,7 @@ WorkingDirectory=/home/{user}/nexetra-media
 ExecStart=/home/{user}/nexetra-media/.venv/bin/python viewer/app.py
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=10
 Environment=NEXETRA_VIEWER_PORT={port}
 
 [Install]
@@ -158,7 +159,7 @@ def deploy(host_name: str, restart_only: bool = False) -> None:
                 raise RuntimeError(f"Install failed (rc={rc})")
 
         # Write systemd user unit
-        print("Installing systemd user service…")
+        print("Installing systemd user service...")
         unit_content = SYSTEMD_UNIT.format(user=user, port=VIEWER_PORT)
         unit_escaped = unit_content.replace("'", "'\\''")
         unit_cmd = (
@@ -178,9 +179,9 @@ def deploy(host_name: str, restart_only: bool = False) -> None:
         # Verify
         rc2, out2, _ = run(client, f"ss -tlnp | grep :{VIEWER_PORT} || echo NOT_LISTENING", timeout=30)
         if str(VIEWER_PORT) in out2:
-            print(f"\n✅  Viewer is live → http://{ip}:{VIEWER_PORT}")
+            print(f"\nViewer is live: http://{ip}:{VIEWER_PORT}")
         else:
-            print(f"\n⚠️  Port {VIEWER_PORT} not detected yet — check: systemctl --user status {SERVICE_NAME}")
+            print(f"\nPort {VIEWER_PORT} not detected yet. Check: systemctl --user status {SERVICE_NAME}")
             print(f"   URL (may need a moment): http://{ip}:{VIEWER_PORT}")
 
     finally:

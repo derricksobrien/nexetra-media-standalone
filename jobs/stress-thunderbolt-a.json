@@ -1,5 +1,7 @@
 {
   "job_id": "stress-thunderbolt-a",
+  "job_version": 1,
+  "job_type": "media_pipeline",
   "title": "Nexetra Networked Lab Stress A",
   "duration_seconds": 75,
   "languages": ["en", "es", "fr", "de", "pt"],
@@ -13,5 +15,14 @@
     "assembly": 1.4,
     "export": 1.4
   },
-  "status": "stress-suite"
+  "status": "stress-suite",
+  "execution_policy": {
+    "priority": "normal",
+    "max_nodes": 6,
+    "retry_budget": 1
+  },
+  "success_criteria": {
+    "required_artifacts": ["{language}/script.json", "{language}/audio.wav", "{language}/{format}.mp4"],
+    "minimum_language_completion": 5
+  }
 }

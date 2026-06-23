@@ -19,6 +19,7 @@ OUTPUT:
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,11 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 # Brand colours (Nexetra placeholder — adjust once brand guidelines are set)
 BRAND_BG = (10, 18, 42)       # dark navy
 BRAND_TEXT = (255, 255, 255)  # white
+
+
+def _job_output_dir(job_id: str) -> Path:
+    override = os.environ.get("NEXETRA_JOB_OUTPUT_DIR")
+    return Path(override) if override else ROOT / "output" / job_id
 
 
 def _make_title_slide(text: str, out_path: Path, width: int = 1920, height: int = 1080) -> bool:
@@ -76,7 +82,7 @@ def assemble(job: dict, lang: str, dry_run: bool = False) -> Path | None:
     Returns output path, or None on failure.
     """
     job_id = job["job_id"]
-    lang_dir = ROOT / "output" / job_id / lang
+    lang_dir = _job_output_dir(job_id) / lang
     audio_path = lang_dir / "audio.wav"
     slide_path = lang_dir / "title_slide.png"
     out_path   = lang_dir / "master_16x9.mp4"
@@ -161,7 +167,13 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="Skip real rendering; write stub MP4 files")
     args = parser.parse_args()
-    run(Path(args.job), dry_run=args.dry_run)
+    job_path = Path(args.job)
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    expected = len(job.get("languages", ["en"]))
+    written = run(job_path, dry_run=args.dry_run)
+    if len(written) != expected:
+        print(f"ERROR: Assembly completed {len(written)}/{expected} required languages.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

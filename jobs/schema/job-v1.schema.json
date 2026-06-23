@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexetra.local/schemas/media-job-v1.schema.json",
+  "title": "Nexetra Media Job Control Language V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "job_version",
+    "job_type",
+    "title",
+    "execution_policy",
+    "success_criteria"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "job_version": {"const": 1},
+    "job_type": {
+      "enum": [
+        "media_pipeline",
+        "content_development",
+        "multi_agent_solution",
+        "agent_harness_regression",
+        "rag_index_and_validation"
+      ]
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "duration_seconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["en", "es", "fr", "de", "pt", "ar", "zh", "yue", "hi", "ja", "sv", "no", "da", "fi"]
+      }
+    },
+    "formats": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["16:9", "9:16", "1:1"]}
+    },
+    "style": {
+      "enum": ["slides", "ai-visuals", "talking-head", "multi-agent-brief", "harness-report", "rag-validation"]
+    },
+    "cta": {"type": "string", "minLength": 1, "maxLength": 300},
+    "status": {
+      "enum": ["draft", "live-test", "stress-suite", "campaign", "regression", "indexing", "test"]
+    },
+    "stage_estimates_minutes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scriptgen": {"type": "number", "exclusiveMinimum": 0},
+        "translate": {"type": "number", "exclusiveMinimum": 0},
+        "tts": {"type": "number", "exclusiveMinimum": 0},
+        "assembly": {"type": "number", "exclusiveMinimum": 0},
+        "export": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["content_development", "multi_agent_solution", "agent_harness_regression", "rag_index_and_validation"]
+        },
+        "agents": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["planner", "researcher", "writer", "critic", "verifier"]}
+        },
+        "coordination_mode": {"enum": ["sequential-review"]},
+        "variant_count": {"type": "integer", "minimum": 1, "maximum": 100},
+        "brand_profile": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "suite_name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "cases": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "seed": {"type": "integer", "minimum": 0},
+        "corpus_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "chunk_strategy": {"enum": ["semantic-800-120"]},
+        "top_k": {"type": "integer", "minimum": 1, "maximum": 100}
+      },
+      "additionalProperties": false
+    },
+    "execution_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priority", "max_nodes", "retry_budget"],
+      "properties": {
+        "priority": {"enum": ["low", "normal", "high"]},
+        "max_nodes": {"type": "integer", "minimum": 1, "maximum": 12},
+        "retry_budget": {"type": "integer", "minimum": 0, "maximum": 10},
+        "stage_timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 7200},
+        "allow_partial_success": {"type": "boolean"}
+      }
+    },
+    "model_policy": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "enum": [
+          "gpt-oss:120b",
+          "qwen2.5:72b-instruct-q4",
+          "qwen2.5:32b-instruct",
+          "qwen2.5:14b-instruct",
+          "llama3.1:8b-instruct",
+          "nomic-embed-text",
+          "xtts-default"
+        ]
+      },
+      "propertyNames": {
+        "enum": [
+          "scriptgen_primary",
+          "translate_primary",
+          "tts_primary",
+          "judge_model_primary",
+          "candidate_model_primary",
+          "embed_model_primary",
+          "retrieval_eval_primary",
+          "fallback"
+        ]
+      }
+    },
+    "success_criteria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_artifacts"],
+      "properties": {
+        "required_artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 240}
+        },
+        "minimum_language_completion": {"type": "integer", "minimum": 1},
+        "quality_gate": {"enum": ["critic_pass"]},
+        "max_failure_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "minimum_recall_at_5": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"job_type": {"const": "media_pipeline"}}, "required": ["job_type"]},
+      "then": {
+        "required": ["duration_seconds", "languages", "formats", "style", "cta"],
+        "properties": {
+          "style": {"enum": ["slides", "ai-visuals", "talking-head"]},
+          "success_criteria": {"required": ["required_artifacts", "minimum_language_completion"]}
+        },
+        "not": {"required": ["scenario"]}
+      }
+    },
+    {
+      "if": {"properties": {"job_type": {"const": "content_development"}}, "required": ["job_type"]},
+      "then": {
+        "required": ["duration_seconds", "languages", "formats", "style", "cta", "scenario", "model_policy"],
+        "properties": {
+          "scenario": {"required": ["type", "variant_count", "brand_profile"], "properties": {"type": {"const": "content_development"}}},
+          "success_criteria": {"required": ["required_artifacts", "minimum_language_completion"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"job_type": {"const": "multi_agent_solution"}}, "required": ["job_type"]},
+      "then": {
+        "required": ["scenario", "model_policy"],
+        "properties": {
+          "scenario": {"required": ["type", "agents", "coordination_mode"], "properties": {"type": {"const": "multi_agent_solution"}}},
+          "success_criteria": {"required": ["required_artifacts", "quality_gate"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"job_type": {"const": "agent_harness_regression"}}, "required": ["job_type"]},
+      "then": {
+        "required": ["scenario", "model_policy"],
+        "properties": {
+          "scenario": {"required": ["type", "suite_name", "cases", "seed"], "properties": {"type": {"const": "agent_harness_regression"}}},
+          "success_criteria": {"required": ["required_artifacts", "max_failure_rate"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"job_type": {"const": "rag_index_and_validation"}}, "required": ["job_type"]},
+      "then": {
+        "required": ["scenario", "model_policy"],
+        "properties": {
+          "scenario": {"required": ["type", "corpus_id", "chunk_strategy", "top_k"], "properties": {"type": {"const": "rag_index_and_validation"}}},
+          "success_criteria": {"required": ["required_artifacts", "minimum_recall_at_5"]}
+        }
+      }
+    }
+  ]
+}

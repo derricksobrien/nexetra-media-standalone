@@ -1,5 +1,7 @@
 {
   "job_id": "harness-regression-weekly-v1",
+  "job_version": 1,
+  "job_type": "agent_harness_regression",
   "title": "Agent Harness Weekly Regression",
   "duration_seconds": 60,
   "languages": ["en"],

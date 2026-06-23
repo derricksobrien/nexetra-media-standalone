@@ -15,6 +15,7 @@ OUTPUT:
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -36,6 +37,31 @@ SCRIPT_TEMPLATE = {
     "generated_at": "",
     "model": "",
 }
+
+
+def _fallback_script(job: dict, model: str, reason: str) -> dict:
+    title = job.get("title", "Nexetra")
+    cta = job.get("cta", "Learn more.")
+    duration = job.get("duration_seconds", 60)
+    return {
+        **SCRIPT_TEMPLATE,
+        "hook": f"{title} helps teams turn complex technical work into clear, useful outcomes.",
+        "body": (
+            "Nexetra combines software engineering, automation, and practical AI delivery "
+            "to help organizations move from idea to working system with less friction."
+        ),
+        "cta": cta,
+        "duration_hint": duration,
+        "keywords": ["Nexetra", "software", "AI", "automation"],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "model": f"{model}:fallback",
+        "warnings": [reason],
+    }
+
+
+def _job_output_dir(job_id: str) -> Path:
+    override = os.environ.get("NEXETRA_JOB_OUTPUT_DIR")
+    return Path(override) if override else ROOT / "output" / job_id
 
 
 def _load_config() -> dict:
@@ -141,7 +167,9 @@ def generate_script(job: dict, dry_run: bool = False) -> dict:
             # Some models still prepend/append text; salvage first JSON object.
             match = re.search(r"\{[\s\S]*\}", content)
             if not match:
-                raise
+                reason = "LLM returned empty or non-JSON content; used deterministic fallback script"
+                print(f"WARNING: {reason}. Raw: {content!r}", file=sys.stderr)
+                return _fallback_script(job, model, reason)
             parsed = json.loads(match.group(0))
     except httpx.ConnectError:
         print(f"ERROR: Cannot reach LLM at {base_url}. Is Ollama running on DGX Spark?", file=sys.stderr)
@@ -150,8 +178,9 @@ def generate_script(job: dict, dry_run: bool = False) -> dict:
         print(f"ERROR: LLM request failed: {exc}", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as exc:
-        print(f"ERROR: LLM returned non-JSON: {exc}\nRaw: {content!r}", file=sys.stderr)
-        sys.exit(1)
+        reason = f"LLM returned malformed JSON after salvage: {exc}; used deterministic fallback script"
+        print(f"WARNING: {reason}", file=sys.stderr)
+        return _fallback_script(job, model, reason)
 
     return {
         **SCRIPT_TEMPLATE,
@@ -170,7 +199,7 @@ def run(job_path: Path, dry_run: bool = False) -> Path:
     job_id = job["job_id"]
     script = generate_script(job, dry_run=dry_run)
 
-    out_dir = ROOT / "output" / job_id / "en"
+    out_dir = _job_output_dir(job_id) / "en"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "script.json"
     out_path.write_text(json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -25,6 +25,7 @@ import io
 import json
 import os
 import re
+import sys
 import tarfile
 import threading
 import time
@@ -32,6 +33,13 @@ import uuid
 from pathlib import Path
 from typing import AsyncGenerator
 from urllib.parse import quote
+
+_MODULE_ROOT = Path(__file__).resolve().parent.parent
+if str(_MODULE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_MODULE_ROOT))
+
+from pipeline.execution import RUNS_DIR, mark_abandoned_runs
+from pipeline.handler_registry import get_handler
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -55,6 +63,8 @@ OUTPUT_DIR   = ROOT / "output"
 RUNS_LOG     = ROOT / "output" / "job_runs.jsonl"
 THUNDERBOLT_LOGS = WORKSPACE_ROOT / "logs"
 THUNDERBOLT_TELEMETRY = ROOT / "output" / "telemetry"
+QUALIFICATION_DIR = ROOT / "output" / "qualification"
+MAX_QUALIFICATION_UPLOAD_BYTES = 2 * 1024 * 1024
 
 # Hosts that must never appear in the dashboard
 PROTECTED_HOSTS = {"linux-1", "linux-2", "das-Mac-mini.local", "sql-server", "ubuntu-3"}
@@ -117,6 +127,42 @@ def _read_json(path: Path):
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _validate_qualification_report(report: object) -> dict:
+    if not isinstance(report, dict):
+        raise ValueError("Qualification report must be a JSON object")
+    required = {"schema_version", "stage", "captured_at", "status", "summary", "checks"}
+    missing = sorted(required - report.keys())
+    if missing:
+        raise ValueError(f"Qualification report missing fields: {', '.join(missing)}")
+    if report.get("schema_version") != 1:
+        raise ValueError("Unsupported qualification schema_version")
+    if not re.fullmatch(r"stage-[0-9]+", str(report.get("stage", ""))):
+        raise ValueError("Invalid qualification stage")
+    if report.get("status") not in {"pass", "fail"}:
+        raise ValueError("Qualification status must be pass or fail")
+    if not isinstance(report.get("summary"), dict) or not isinstance(report.get("checks"), list):
+        raise ValueError("Qualification summary and checks have invalid types")
+    return report
+
+
+def get_qualification_status() -> dict:
+    if not QUALIFICATION_DIR.exists():
+        return {"status": "not_run", "stage": "", "checks": [], "summary": {}}
+    candidates = sorted(
+        QUALIFICATION_DIR.glob("stage-*/latest.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for path in candidates:
+        report = _read_json(path)
+        try:
+            validated = _validate_qualification_report(report)
+        except ValueError:
+            continue
+        return {**validated, "source": str(path)}
+    return {"status": "not_run", "stage": "", "checks": [], "summary": {}}
 
 
 def get_health_data() -> dict:
@@ -606,7 +652,9 @@ def _estimate_minutes(job: dict, stage: str) -> float:
 def _job_estimates(job: dict) -> tuple[list[dict], float]:
     stage_rows = []
     total = 0.0
-    for stage in STAGES:
+    handler = get_handler(job.get("job_type", ""))
+    stage_names = [stage.name for stage in handler.stages] if handler else STAGES
+    for stage in stage_names:
         mins = round(_estimate_minutes(job, stage), 1)
         total += mins
         stage_rows.append({"stage": stage, "minutes": mins})
@@ -665,26 +713,45 @@ def _job_goal(job: dict) -> str:
 
 
 def get_jobs() -> list[dict]:
+    manifests = mark_abandoned_runs(RUNS_DIR)
+    latest_by_job: dict[str, dict] = {}
+    for manifest in manifests:
+        latest_by_job.setdefault(manifest.get("job_id", ""), manifest)
     jobs = []
     for p in sorted(JOBS_DIR.glob("*.json")):
         try:
             job    = json.loads(p.read_text(encoding="utf-8"))
             job_id = job.get("job_id", p.stem)
             out_dir = OUTPUT_DIR / job_id
-            stages_done = [s for s, fn in STAGE_CHECKS.items()
-                           if out_dir.exists() and fn(out_dir)]
+            manifest = latest_by_job.get(job_id)
+            handler = get_handler(job.get("job_type", ""))
+            stage_names = [stage.name for stage in handler.stages] if handler else STAGES
+            stages_done = [
+                stage.get("stage")
+                for stage in (manifest or {}).get("stages", [])
+                if stage.get("stage") in stage_names and stage.get("status") == "passed"
+            ]
+            success_evaluation = (manifest or {}).get("success_evaluation") or {}
+            artifact_validation = success_evaluation.get("media_validation") or success_evaluation.get("content_validation") or {}
             stage_estimates, estimated_total_minutes = _job_estimates(job)
             jobs.append({
                 "job_id":      job_id,
+                "job_version": job.get("job_version"),
+                "job_type":    job.get("job_type", "unknown"),
                 "title":       job.get("title", job_id),
                 "goal":        _job_goal(job),
                 "languages":   job.get("languages", []),
                 "formats":     job.get("formats", []),
                 "status":      job.get("status", "draft"),
+                "run_status":  (manifest or {}).get("status", "not_run"),
+                "run_id":      (manifest or {}).get("run_id", ""),
+                "provenance":  (manifest or {}).get("provenance", {}),
+                "artifact_validation": artifact_validation,
                 "cta":         job.get("cta", ""),
                 "stages_done": stages_done,
-                "stages_total": len(STAGES),
-                "progress":    int(len(stages_done) / len(STAGES) * 100),
+                "stages_total": len(stage_names),
+                "stage_names":  stage_names,
+                "progress":    int(len(stages_done) / len(stage_names) * 100) if stage_names else 0,
                 "estimated_stage_minutes": stage_estimates,
                 "estimated_total_minutes": estimated_total_minutes,
                 "output_items": _collect_output_items(job_id),
@@ -708,6 +775,28 @@ def get_history(n: int = 120) -> list[dict]:
 
 
 def get_run_archive(n: int = 60) -> list[dict]:
+    manifests = mark_abandoned_runs(RUNS_DIR)
+    if manifests:
+        return [
+            {
+                "run_id": manifest.get("run_id", ""),
+                "job": manifest.get("job_path", manifest.get("job_id", "")),
+                "job_id": manifest.get("job_id", ""),
+                "runner": manifest.get("runner", "unknown"),
+                "status": manifest.get("status", "running"),
+                "started_at": manifest.get("started_ts", 0),
+                "ended_at": manifest.get("ended_ts", 0),
+                "events": len(manifest.get("stages", [])) + 2,
+                "last_event": "batch_done" if manifest.get("status") == "done" else "batch_fail" if manifest.get("status") == "failed" else manifest.get("status", "running"),
+                "last_stage": (manifest.get("stages") or [{}])[-1].get("stage", ""),
+                "provenance": manifest.get("provenance", {}),
+                "artifact_root": manifest.get("artifact_root", ""),
+                "artifact_rel": manifest.get("artifact_rel", ""),
+                "artifact_validation": (manifest.get("success_evaluation") or {}).get("media_validation") or (manifest.get("success_evaluation") or {}).get("content_validation") or {},
+                "preflight": manifest.get("preflight", []),
+            }
+            for manifest in manifests[:n]
+        ]
     history = get_history(n=n)
     ordered = list(reversed(history))
     open_runs: dict[tuple[str, str], dict] = {}
@@ -770,6 +859,7 @@ def build_snapshot() -> dict:
         "thunderbolt": build_thunderbolt_status(),
         "history": get_history(),
         "runs":    get_run_archive(),
+        "qualification": get_qualification_status(),
         "ts":      time.time(),
     }
 
@@ -899,6 +989,37 @@ async def api_upload_telemetry(request: Request):
     latest.write_bytes(body)
     stamped.write_bytes(body)
     return {"ok": True, "saved": str(latest), "timestamp": ts}
+
+
+@app.post("/api/upload-qualification")
+async def api_upload_qualification(request: Request):
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty body")
+    if len(body) > MAX_QUALIFICATION_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Qualification report is too large")
+    try:
+        report = _validate_qualification_report(json.loads(body.decode("utf-8")))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    stage = report["stage"]
+    checkpoint = re.sub(r"[^0-9A-Za-z_-]", "-", str(report.get("checkpoint_id") or time.strftime("%Y%m%d-%H%M%S")))
+    stage_dir = QUALIFICATION_DIR / stage
+    checkpoint_dir = stage_dir / checkpoint
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(report, indent=2, ensure_ascii=False)
+    stamped = checkpoint_dir / "baseline.json"
+    latest = stage_dir / "latest.json"
+    stamped.write_text(encoded, encoding="utf-8")
+    latest.write_text(encoded, encoding="utf-8")
+    return {
+        "ok": True,
+        "stage": stage,
+        "status": report["status"],
+        "saved": str(latest),
+        "checkpoint_id": checkpoint,
+    }
 
 
 @app.get("/events")
